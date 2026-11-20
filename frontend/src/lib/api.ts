@@ -4,16 +4,24 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(
+export async function fetchApi(
   path: string,
   options?: RequestInit,
-): Promise<T> {
+): Promise<Response> {
   const response = await fetch(`/api/v1/${path}`, {
     ...options,
     credentials: "same-origin",
     cache: "no-store",
   });
   if (!response.ok) throw new ApiError(response.status);
+  return response;
+}
+
+export async function request<T>(
+  path: string,
+  options?: RequestInit,
+): Promise<T> {
+  const response = await fetchApi(path, options);
   return (response.status === 204 ? undefined : await response.json()) as T;
 }
 

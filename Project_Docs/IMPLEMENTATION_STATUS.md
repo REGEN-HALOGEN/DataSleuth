@@ -8,7 +8,7 @@ Last updated: 2026-11-20
 - [x] **1 — Safe source and scanner foundation:** source API, bounded scanner, persisted jobs, WSL/Linux worker, retries, and cancellation verified.
 - [ ] **2 — Detection and privacy protections:** deterministic detectors, masked evidence, and analyst access to versioned correlation are implemented and verified.
 - [x] **3 — Inventory and analyst workflow:** source management, scan history, findings inventory, audited review, related-occurrence tables, and operational overview are implemented and verified.
-- [ ] **4 — Reporting and demonstration:** pending.
+- [ ] **4 — Reporting and demonstration:** masked CSV/JSON exports implemented. Reproducible demo and full acceptance verification are pending.
 
 ## Scanner foundation progress
 
@@ -96,11 +96,23 @@ Last updated: 2026-11-20
   review count. Chromium verified that a completed scan appears in Overview
   and that its review link opens the filtered inventory.
 
+## Masked reports
+
+- Administrators and analysts can download filtered CSV and JSON reports.
+  A report includes generation time, scope, filters, scan references, and
+  allowlisted finding fields. Findings are identified by UUID and evidence
+  is redacted. Reports are capped at 10,000 rows and downloads are audited.
+- CSV includes one report metadata record and one record per finding.
+  JSON includes the same structured data in an envelope. File paths,
+  source labels, raw identifiers, and fingerprint digests are excluded.
+- The live browser suite covered downloading and inspecting both formats
+  after a synthetic scan and review. Backend tests covered empty reports,
+  limits, audit records, origin checks, and private field exclusion.
+
 ## Next phase work
 
-Build masked CSV/JSON exports and exercise the documented acceptance
-workflow with a reproducible synthetic demo. Native Windows worker
-execution is pending.
+Exercise the documented acceptance workflow using a reproducible synthetic
+demo. Native Windows worker execution is pending.
 
 ## Milestone 0 implementation
 
@@ -122,4 +134,4 @@ execution is pending.
 
 - Account provisioning and administrator password recovery are local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
-- Browser scan launch, history, reviews, and related occurrences are available. Reports and the synthetic acceptance workflow are pending.
+- Browser scan launch, history, reviews, and related occurrences are available. Masked reports are available. The synthetic acceptance workflow is pending.

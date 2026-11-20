@@ -33,7 +33,8 @@ of approved absolute WSL paths and restart the app. Open **Scan Sources**,
 register an approved directory, and confirm a read-only scan. **Scan History**
 shows live counts and lets operators cancel queued or running scans.
 Open **Discoveries** to filter masked findings, review individual results,
-and inspect related occurrences.
+and inspect related occurrences. Use **Reports** to download a masked CSV
+or JSON for a scan, source, or filtered inventory.
 
 Keep the terminal open while using DataSleuth. Ctrl+C stops the API, frontend, and
 scan worker. Run `docker compose stop` separately to stop PostgreSQL and Redis.
@@ -133,6 +134,13 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-20 — Masked reports
+
+- Added protected CSV and JSON downloads with scan, source, category,
+  file type, confidence, review status, and date filters.
+- Reports contain structured metadata, redacted evidence, and scan references.
+  Exports are audited and capped at 10,000 findings per download.
 
 ### 2026-11-20 — Local administrator recovery
 

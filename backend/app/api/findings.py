@@ -31,7 +31,7 @@ REVIEW_ACTIONS = {
 }
 
 
-class FindingFilters(BaseModel):
+class FindingScope(BaseModel):
     model_config = ConfigDict(extra="forbid")
     category: Category | None = None
     review_status: ReviewStatus | None = None
@@ -41,14 +41,17 @@ class FindingFilters(BaseModel):
     scan_to: date | None = None
     extension: Extension | None = None
     min_confidence: Annotated[float, Field(ge=0, le=1)] | None = None
-    limit: Annotated[int, Field(ge=1, le=100)] = 25
-    offset: Annotated[int, Field(ge=0, le=10_000_000)] = 0
 
     @model_validator(mode="after")
     def validate_scan_range(self):
         if self.scan_from and self.scan_to and self.scan_from > self.scan_to:
             raise ValueError("The start date must be on or before the end date.")
         return self
+
+
+class FindingFilters(FindingScope):
+    limit: Annotated[int, Field(ge=1, le=100)] = 25
+    offset: Annotated[int, Field(ge=0, le=10_000_000)] = 0
 
 
 class FindingSearch(FindingFilters):
@@ -141,7 +144,7 @@ def page(db: Session, conditions: list, limit: int, offset: int) -> FindingPage:
     )
 
 
-def filtered_page(request: Request, filters: FindingFilters, term: str = ""):
+def finding_conditions(filters: FindingScope, term: str = "") -> list:
     conditions = [
         column == value
         for column, value in (
@@ -174,6 +177,11 @@ def filtered_page(request: Request, filters: FindingFilters, term: str = ""):
                 ),
             )
         )
+    return conditions
+
+
+def filtered_page(request: Request, filters: FindingFilters, term: str = ""):
+    conditions = finding_conditions(filters, term)
     with request.app.state.sessions() as db:
         return page(db, conditions, filters.limit, filters.offset)
 

@@ -1,21 +1,24 @@
 """Verify review and related occurrences without exposing source values."""
 
+import csv
+from io import StringIO
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.core.auth import COOKIE_NAME, new_token, token_digest
 from app.main import app
 from app.models.auth import BrowserSession, User
 from app.models.scan import DataFingerprint, Finding, ScannedFile, ScanJob
-from app.models.source import ScanSource
+from app.models.source import AuditEvent, ScanSource
 
 PREFIX = "/api/v1/findings"
 ORIGIN = {"Origin": "http://127.0.0.1:5173"}
 
 
-def test_filtered_masked_findings_and_audited_review(services):
+def test_filtered_masked_findings_review_and_exports(services, monkeypatch):
     with TestClient(app) as client:
         with app.state.sessions.begin() as db:
             user = User(
@@ -88,6 +91,61 @@ def test_filtered_masked_findings_and_audited_review(services):
             row["category"] == "email" and row["count"] >= 2
             for row in overview["categories"]
         )
+        report_path = "/api/v1/reports/findings"
+        filters = {"scan_id": str(job.id), "review_status": "needs_review"}
+        assert client.post(f"{report_path}.json", json=filters).status_code == 403
+        json_report = client.post(f"{report_path}.json", headers=ORIGIN, json=filters)
+        assert json_report.status_code == 200
+        document = json_report.json()
+        assert document["scope"] == "scan"
+        assert document["filters"] == filters
+        assert document["scan_references"] == [str(job.id)]
+        assert document["row_count"] == 2
+        assert {item["masked_evidence"] for item in document["findings"]} == {
+            "[redacted]"
+        }
+        csv_report = client.post(f"{report_path}.csv", headers=ORIGIN, json=filters)
+        assert csv_report.status_code == 200
+        assert "attachment" in csv_report.headers["content-disposition"]
+        assert csv_report.headers["cache-control"] == "no-store"
+        rows = list(csv.DictReader(StringIO(csv_report.text)))
+        assert [row["record_type"] for row in rows] == ["report", "finding", "finding"]
+        assert rows[0]["row_count"] == "2"
+        for response in (json_report, csv_report):
+            for private_value in (
+                fingerprint.digest,
+                source.configured_path,
+                "fixture-copy@example.invalid",
+                "fixture_%_one",
+            ):
+                assert private_value not in response.text
+        empty = client.post(
+            f"{report_path}.csv", headers=ORIGIN, json=filters | {"category": "ifsc"}
+        )
+        assert list(csv.DictReader(StringIO(empty.text)))[0]["row_count"] == "0"
+        from app.api import reports
+
+        with monkeypatch.context() as patch:
+            patch.setattr(reports, "MAX_ROWS", 1)
+            assert (
+                client.post(
+                    f"{report_path}.json", headers=ORIGIN, json=filters
+                ).status_code
+                == 422
+            )
+        with app.state.sessions() as db:
+            audits = db.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.actor_id == user.id,
+                    AuditEvent.entity_type == "finding_report",
+                )
+            ).all()
+            assert sorted(event.action for event in audits) == [
+                "export_csv",
+                "export_csv",
+                "export_json",
+            ]
+
         filtered = client.get(
             PREFIX,
             params={"scan_id": str(job.id), "extension": "txt", "min_confidence": 0.9},

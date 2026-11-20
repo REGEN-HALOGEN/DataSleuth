@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 const admin = process.env.DATASLEUTH_E2E_ADMIN;
@@ -83,6 +84,36 @@ test("scan an approved directory and review correlated discoveries", async ({
   await page.reload();
   await expect(page.getByLabel("Review status")).toHaveValue("confirmed");
   await expect(page.getByLabel("Review history")).toContainText("Confirmed by");
+  await page
+    .getByRole("link", { name: "View findings from this scan" })
+    .click();
+  await page.getByRole("link", { name: "Export this scan" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Reports", exact: true }),
+  ).toBeVisible();
+  for (const format of ["csv", "json"]) {
+    await page.getByLabel("Format").selectOption(format);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Download report" }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe(`datasleuth-findings.${format}`);
+    const exported = await readFile(await download.path(), "utf8");
+    expect(exported).toContain("[redacted]");
+    expect(exported).not.toContain(sample);
+    expect(exported).not.toContain("synthetic.txt");
+    if (format === "json") {
+      const report = JSON.parse(exported);
+      expect(report.scope).toBe("scan");
+      expect(report.row_count).toBe(2);
+      expect(
+        report.findings.some(
+          (finding: { review_status: string }) =>
+            finding.review_status === "confirmed",
+        ),
+      ).toBe(true);
+    }
+  }
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Recent scans" }),

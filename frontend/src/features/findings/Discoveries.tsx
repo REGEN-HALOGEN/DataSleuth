@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ApiError } from "../../lib/api";
 import { scans, type ScanSource } from "../scans/api";
 import {
@@ -9,6 +9,7 @@ import {
   reviewLabels,
   type Finding,
 } from "./api";
+import { FindingScopeFields, findingFormValues } from "./FindingScopeFields";
 import { FindingTable, Pagination } from "./FindingTable";
 
 export function Discoveries({ onExpired }: { onExpired: () => void }) {
@@ -70,94 +71,30 @@ export function Discoveries({ onExpired }: { onExpired: () => void }) {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
     setResults(undefined);
     setError(false);
     setOffset(0);
-    setFilters(
-      Object.fromEntries(
-        [...data].flatMap(([key, value]) =>
-          typeof value === "string" && value.trim()
-            ? [[key, value.trim()]]
-            : [],
-        ),
-      ),
-    );
+    setFilters(findingFormValues(event.currentTarget));
   }
 
   return (
     <>
-      <h1>Discoveries</h1>
+      <div className="overview-heading">
+        <h1>Discoveries</h1>
+        <Link
+          to={
+            scanId ? `/reports?scan=${encodeURIComponent(scanId)}` : "/reports"
+          }
+        >
+          {scanId ? "Export this scan" : "Reports"}
+        </Link>
+      </div>
       <form className="finding-filters" onSubmit={submit}>
         <label>
           Search file or source
           <input name="term" type="search" maxLength={160} />
         </label>
-        <label>
-          Category
-          <select name="category" defaultValue={filters.category ?? ""}>
-            <option value="">All</option>
-            {Object.entries(categoryLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Source
-          <select name="source_id">
-            <option value="">All</option>
-            {sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          File type
-          <select name="extension">
-            <option value="">All</option>
-            {["txt", "log", "csv", "json", "pdf", "xlsx", "xlsm"].map(
-              (extension) => (
-                <option key={extension} value={extension}>
-                  {extension.toUpperCase()}
-                </option>
-              ),
-            )}
-          </select>
-        </label>
-        <label>
-          Confidence
-          <select name="min_confidence">
-            <option value="">Any</option>
-            <option value="0.75">75% or higher</option>
-            <option value="0.9">90% or higher</option>
-          </select>
-        </label>
-        <label>
-          Review status
-          <select
-            name="review_status"
-            defaultValue={filters.review_status ?? ""}
-          >
-            <option value="">All</option>
-            {Object.entries(reviewLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Scan from (UTC)
-          <input name="scan_from" type="date" />
-        </label>
-        <label>
-          Scan to (UTC)
-          <input name="scan_to" type="date" />
-        </label>
+        <FindingScopeFields sources={sources} defaults={filters} />
         <button className="primary" type="submit">
           Apply filters
         </button>

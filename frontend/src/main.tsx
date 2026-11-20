@@ -18,6 +18,7 @@ import { ScanHistory } from "./features/scans/ScanHistory";
 import { ScanSources } from "./features/scans/ScanSources";
 import { Discoveries } from "./features/findings/Discoveries";
 import { DiscoveryDetail } from "./features/findings/DiscoveryDetail";
+import { Reports } from "./features/reports/Reports";
 import "./styles/main.css";
 
 const discoveryPath = /^\/discoveries\/[0-9a-f-]{36}$/i;
@@ -28,6 +29,7 @@ const pageTitles: Record<string, string> = {
   "/sources": "Scan Sources",
   "/discoveries": "Discoveries",
   "/scans": "Scan History",
+  "/reports": "Reports",
 };
 
 function Shell({
@@ -72,6 +74,7 @@ function Shell({
               <NavLink to="/discoveries">Discoveries</NavLink>
               <NavLink to="/sources">Scan Sources</NavLink>
               <NavLink to="/scans">Scan History</NavLink>
+              <NavLink to="/reports">Reports</NavLink>
             </>
           )}
           {account.role === "admin" && (
@@ -274,6 +277,19 @@ function App() {
             ) : (
               <>
                 <h1>Scan Sources</h1>
+                <p role="alert">Operator access is required.</p>
+              </>
+            )
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            canScan ? (
+              <Reports key={location.search} onExpired={expire} />
+            ) : (
+              <>
+                <h1>Reports</h1>
                 <p role="alert">Operator access is required.</p>
               </>
             )
