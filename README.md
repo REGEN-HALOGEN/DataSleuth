@@ -1,7 +1,7 @@
 # DataSleuth
 
 DataSleuth is a local-first privacy discovery application under development.
-The local foundation includes account sign-in and role-based access. Discovery is planned for subsequent milestones.
+The local foundation includes account sign-in and role-based access. The scanner foundation supports approved sources and a read-only backend pipeline that stores masked findings.
 See [implementation status](Project_Docs/IMPLEMENTATION_STATUS.md) and the
 specifications in `Project_Docs/`.
 
@@ -108,7 +108,35 @@ logs or bug reports.
 
 Update this section in the same commit or pull request as any user-visible
 feature, fix, setup change, or security change. Keep entries newest first and
-record any migration or action required by existing users.
+record any migration or action required by existing users. After verifying
+each completed task, review the staged files for sensitive data, commit the
+changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-20 — Bounded readers and masked findings
+
+- Added WSL/Linux readers for TXT, LOG, CSV, JSON, text-based PDF, XLSX, and
+  XLSM. Extraction runs in a separate process with input, output, memory, and
+  time limits. Spreadsheet macros and formulas are never executed.
+- Added deterministic potential-match detection for email, Indian mobile
+  numbers, PAN-shaped and Aadhaar-shaped values, IFSC, and context-labelled
+  bank account numbers. Stored evidence is redacted and duplicates correlate
+  through versioned HMAC fingerprints.
+- Added migration `0004_scan_findings` and verified the pipeline with synthetic
+  files and disposable PostgreSQL. `bash start.sh` refreshes dependencies and
+  applies the migration. Manual setup requires reinstalling backend
+  dependencies and running `alembic upgrade head`.
+- The pipeline is available to trusted backend code. Scan launch, progress,
+  cancellation, and findings views are pending.
+
+### 2026-11-20 — Scanner foundation begins
+
+- Added authenticated API endpoints to register, list, inspect, rename, enable,
+  and disable local directory sources. Source changes are audited.
+- Added bounded metadata-only file discovery for WSL/Linux. It skips symlinks
+  and enforces configured depth, entry count, and file-size limits.
+- Added migration `0003_scan_sources`. Run `bash start.sh` on WSL or
+  `alembic upgrade head` during manual setup. Configure `ALLOWED_SCAN_ROOTS`
+  as a JSON list of approved absolute paths before registering a source.
 
 ### 2026-11-20 — Milestone 0 foundation
 

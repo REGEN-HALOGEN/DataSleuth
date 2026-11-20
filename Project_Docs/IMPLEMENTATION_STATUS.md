@@ -5,22 +5,56 @@ Last updated: 2026-11-20
 ## Milestones
 
 - [x] **0 — Foundation:** localhost infrastructure, validated configuration, pooled connections, migrations, health endpoints, fail-closed logging, local account provisioning, authentication, server-side RBAC, protected frontend routes, and automated verification.
-- [ ] **1 — Safe source and scanner foundation:** pending.
-- [ ] **2 — Detection and privacy protections:** pending.
+- [ ] **1 — Safe source and scanner foundation:** source API, discovery, bounded readers, and scan persistence implemented. Worker, cancellation, and product scan workflows are pending.
+- [ ] **2 — Detection and privacy protections:** first deterministic detectors, redacted evidence, and keyed correlation implemented. Analyst access to occurrences and further privacy verification are pending.
 - [ ] **3 — Inventory and analyst workflow:** pending.
 - [ ] **4 — Reporting and demonstration:** pending.
 
-## Next phase
+## Scanner foundation progress
 
-Start with the scanner phase in the engineering handover. Build and verify
-read-only discovery of operator-approved directories, bounded readers for the
-formats in the scope, and the initial detection, masking, keyed fingerprinting,
-and findings persistence. The first tests should cover path traversal, symlink
-escapes, and unsupported, oversized, or malformed inputs using synthetic files.
+- Migration `0003_scan_sources` adds persistent sources and audit events.
+  Administrators and analysts can register, list, inspect, rename, enable,
+  and disable sources through `/api/v1/sources`. The API rejects paths outside
+  `ALLOWED_SCAN_ROOTS` and revalidates a source when it is enabled.
+- WSL/Linux discovery inventories metadata within a validated directory.
+  Descriptor-relative traversal rejects symlinks, including a source path
+  swapped after validation. Discovery bounds entries examined, recursion depth,
+  and eligible file size.
+- Verified 18 backend tests against disposable PostgreSQL and Redis.
+  Migration from `0002_auth` to `0003_scan_sources` succeeded and Alembic
+  reported no schema drift.
 
-Background processing follows the scanner phase. Keep the safe scanner
-milestone open until the scope's worker, progress, and cancellation criteria
-are verified. The milestone labels above follow the scope document.
+## Readers and findings progress
+
+- The WSL/Linux pipeline revalidates approved sources and opens only regular,
+  single-link files using descriptor-relative reads. Extraction uses an
+  isolated Python subprocess with a 32 MiB input ceiling, a 1,000,000-byte
+  extracted text ceiling, a 768 MiB address-space limit, and the configured
+  parser timeout per file. PDF pages and workbook cells and ZIP expansion
+  are bounded. PDF extraction uses an existing text layer. Workbook readers
+  consume cached cell values without evaluating formulas or loading macros.
+- The scanner uses deterministic, versioned potential-match rules for the
+  initial data categories. This slice uses pattern and context rules instead
+  of adding Presidio or a statistical name recognizer as a dependency.
+  Confidence values reflect rule strength. Findings include a location in
+  extracted text and a fixed redaction marker. The HMAC key stays in
+  configuration, with the category and canonical value domain-separated and
+  the key version stored beside each digest.
+- Migration `0004_scan_findings` adds scan jobs, file metadata, fingerprints,
+  and findings. File results and their counters are committed together;
+  malformed and encrypted documents receive fixed reason codes.
+- All 28 backend tests passed on WSL with disposable PostgreSQL and Redis.
+  The upgrade from `0003_scan_sources` to `0004_scan_findings` passed with
+  no schema drift. Tests covered all seven reader formats, limits, unsafe
+  links, masking, per-file error isolation, and versioned correlation.
+
+## Next phase work
+
+Wire the trusted scanner pipeline to the Redis-backed worker with persisted
+progress, retries, and cooperative cancellation, then expose scan execution
+through the authenticated source workflow. Keep the safe scanner milestone
+open until these criteria are verified. Native Windows discovery and findings
+views are pending.
 
 ## Milestone 0 implementation
 
@@ -42,4 +76,4 @@ are verified. The milestone labels above follow the scope document.
 
 - Account provisioning is add-only and local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
-- Scanner, worker, and analyst workflows remain pending. Milestone 0 covers the local application foundation.
+- Scanning runs in WSL/Linux through trusted backend code. Queue-backed execution and analyst workflows remain pending.

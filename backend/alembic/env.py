@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, pool
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import load_config
+from app.models import scan, source  # noqa: F401  Register mapped tables.
 from app.models.auth import Base
 
 

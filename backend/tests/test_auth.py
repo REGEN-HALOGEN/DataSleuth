@@ -1,7 +1,6 @@
 """Authentication checks against explicitly selected disposable services."""
 
 from datetime import datetime, timedelta, timezone
-import os
 from uuid import uuid4
 
 import pytest
@@ -16,23 +15,6 @@ from app.models.auth import BrowserSession, User
 ORIGIN = "http://127.0.0.1:5173"
 PASSWORD = "synthetic passphrase for authentication tests"
 PREFIX = "/api/v1/auth"
-
-
-@pytest.fixture(scope="module")
-def services():
-    names = ("DATABASE_URL", "POSTGRES_PASSWORD", "REDIS_URL", "REDIS_PASSWORD")
-    settings = {name: os.getenv(f"DATASLEUTH_TEST_{name}") for name in names}
-    if not all(settings.values()):
-        pytest.skip(
-            "Set DATASLEUTH_TEST_* for disposable PostgreSQL and Redis services."
-        )
-    if "datasleuth_" not in settings["DATABASE_URL"].rsplit("/", 1)[-1]:
-        pytest.fail("Select a disposable database with a datasleuth_ prefix.")
-    with pytest.MonkeyPatch.context() as patch:
-        for name, value in settings.items():
-            patch.setenv(name, value)
-        patch.setenv("BROWSER_ORIGIN", ORIGIN)
-        yield
 
 
 @pytest.fixture

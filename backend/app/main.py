@@ -1,7 +1,9 @@
 """Local development API foundation."""
 
 from contextlib import asynccontextmanager
+import json
 import logging
+from pathlib import Path
 import secrets
 
 from fastapi import FastAPI, Request
@@ -11,6 +13,7 @@ from redis import Redis
 from sqlalchemy import text
 
 from app.api.auth import router as auth_router
+from app.api.sources import router as sources_router
 from app.core.auth import password_hasher
 from app.core.config import load_config
 from app.core.logging import configure_logging
@@ -32,6 +35,9 @@ async def lifespan(app: FastAPI):
             )
             app.state.engine = engine
             app.state.sessions = sessions
+            app.state.scan_roots = tuple(
+                Path(root) for root in json.loads(config["ALLOWED_SCAN_ROOTS"])
+            )
             app.state.redis = redis
             app.state.login_limit_key = config["APPLICATION_SECRET"].encode("utf-8")
             app.state.browser_origins = {config["BROWSER_ORIGIN"]}
@@ -56,12 +62,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="DataSleuth", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(sources_router)
 
 
 @app.middleware("http")
-async def prevent_auth_caching(request: Request, call_next):
+async def prevent_private_api_caching(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/api/v1/auth/"):
+    if request.url.path.startswith("/api/v1/"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
