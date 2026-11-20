@@ -5,6 +5,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 root=$PWD
 python="$root/.venv-linux/bin/python"
 api_pid=
+worker_pid=
 frontend_pid=
 
 fail() {
@@ -14,7 +15,7 @@ fail() {
 
 cleanup() {
     local pid
-    for pid in "$frontend_pid" "$api_pid"; do
+    for pid in "$frontend_pid" "$api_pid" "$worker_pid"; do
         if [[ -n $pid ]]; then
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
@@ -94,18 +95,20 @@ fi
 
 "$python" -m app.serve &
 api_pid=$!
+"$python" -m app.workers.scan &
+worker_pid=$!
 
 cd -- "$root/frontend"
 node node_modules/vite/bin/vite.js &
 frontend_pid=$!
 
 for ((attempt = 0; attempt < 60; attempt++)); do
-    kill -0 "$api_pid" "$frontend_pid" 2>/dev/null || fail "An application server exited during startup."
+    kill -0 "$api_pid" "$frontend_pid" "$worker_pid" 2>/dev/null || fail "An application server exited during startup."
     if curl --noproxy '*' --fail --silent --max-time 2 http://127.0.0.1:8000/health/ready >/dev/null &&
        curl --noproxy '*' --fail --silent --max-time 2 http://127.0.0.1:5173/ >/dev/null; then
         printf '\nDataSleuth is ready at http://127.0.0.1:5173\n'
-        printf 'Press Ctrl+C to stop the API and frontend. Docker services stay running.\n'
-        wait -n "$api_pid" "$frontend_pid" || exit "$?"
+        printf 'Press Ctrl+C to stop the API, frontend, and scan worker. Docker services stay running.\n'
+        wait -n "$api_pid" "$frontend_pid" "$worker_pid" || exit "$?"
         fail "An application server stopped."
     fi
     sleep 1

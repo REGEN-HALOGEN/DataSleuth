@@ -22,14 +22,14 @@ bash start.sh
 ```
 
 The script prepares the Linux dependencies, starts PostgreSQL and Redis,
-applies pending migrations, and runs the API and frontend on loopback. When
+applies pending migrations, and runs the API, frontend, and scan worker. The API and frontend bind to loopback. When
 there is no active administrator, it prompts for a username and a hidden
 passphrase of 10–256 characters. Press Enter at the username prompt to use `local-admin`. There is
 no preset password. Sign in at `http://127.0.0.1:5173` with the credentials you
 just chose. Subsequent runs reuse your existing accounts.
 
-Keep the terminal open while using DataSleuth. Ctrl+C stops the API and
-frontend. Run `docker compose stop` separately to stop PostgreSQL and Redis.
+Keep the terminal open while using DataSleuth. Ctrl+C stops the API, frontend, and
+scan worker. Run `docker compose stop` separately to stop PostgreSQL and Redis.
 The script preserves existing frontend dependency directories under
 `.venv-linux/frontend-deps.*` when switching to a fresh WSL installation.
 Run frontend setup with Windows npm again if you switch back to Windows.
@@ -111,6 +111,18 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-20 — Background scan processing
+
+- Added authenticated scan launch, status, history, and cancellation endpoints
+  under `/api/v1/scans`. Launches require an enabled source ID and explicit
+  read-only confirmation.
+- The WSL/Linux worker uses Redis notifications and durable PostgreSQL jobs.
+  Interrupted scans resume pending files with up to three worker attempts.
+  Cancelling a scan keeps committed results and discards in-flight output.
+- `start.sh` now runs the worker and applies migration `0005_scan_queue`.
+  Start the worker separately with `python -m app.workers.scan` for a manual
+  WSL/Linux setup. Browser scan controls are pending.
 
 ### 2026-11-20 — Bounded readers and masked findings
 

@@ -5,7 +5,7 @@ Last updated: 2026-11-20
 ## Milestones
 
 - [x] **0 — Foundation:** localhost infrastructure, validated configuration, pooled connections, migrations, health endpoints, fail-closed logging, local account provisioning, authentication, server-side RBAC, protected frontend routes, and automated verification.
-- [ ] **1 — Safe source and scanner foundation:** source API, discovery, bounded readers, and scan persistence implemented. Worker, cancellation, and product scan workflows are pending.
+- [x] **1 — Safe source and scanner foundation:** source API, bounded scanner, persisted jobs, WSL/Linux worker, retries, and cancellation verified.
 - [ ] **2 — Detection and privacy protections:** first deterministic detectors, redacted evidence, and keyed correlation implemented. Analyst access to occurrences and further privacy verification are pending.
 - [ ] **3 — Inventory and analyst workflow:** pending.
 - [ ] **4 — Reporting and demonstration:** pending.
@@ -48,13 +48,26 @@ Last updated: 2026-11-20
   no schema drift. Tests covered all seven reader formats, limits, unsafe
   links, masking, per-file error isolation, and versioned correlation.
 
+## Background processing
+
+- Migration `0005_scan_queue` adds durable lease, cancellation, and retry
+  state. Redis sends fixed wake-up notifications. The worker also polls
+  PostgreSQL so a missed notification cannot strand a queued scan.
+- An operator can start, poll, and cancel a scan by ID through the API.
+  The worker snapshots discovered file metadata and commits results alongside
+  progress. A replacement worker resumes pending files. Stale workers cannot
+  commit after a replacement acquires the job, and jobs fail after three
+  worker attempts.
+- Verified 32 backend tests on WSL with disposable PostgreSQL and Redis,
+  including a worker subprocess, missing Redis notification recovery, stale
+  worker fencing, cooperative cancellation, and retry exhaustion. Migration
+  from `0004_scan_findings` had no schema drift.
+
 ## Next phase work
 
-Wire the trusted scanner pipeline to the Redis-backed worker with persisted
-progress, retries, and cooperative cancellation, then expose scan execution
-through the authenticated source workflow. Keep the safe scanner milestone
-open until these criteria are verified. Native Windows discovery and findings
-views are pending.
+Connect Scan Sources and Scan History to the API, then build the analyst
+inventory and related-occurrence views with masked evidence. Native Windows
+worker execution is pending.
 
 ## Milestone 0 implementation
 
@@ -76,4 +89,4 @@ views are pending.
 
 - Account provisioning is add-only and local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
-- Scanning runs in WSL/Linux through trusted backend code. Queue-backed execution and analyst workflows remain pending.
+- Scan launch and progress are available through the authenticated API. Browser scan controls and analyst workflows remain pending.

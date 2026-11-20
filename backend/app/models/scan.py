@@ -23,7 +23,13 @@ class ScanJob(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     source_id: Mapped[UUID] = mapped_column(ForeignKey("scan_sources.id"), index=True)
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
-    status: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    attempts: Mapped[int] = mapped_column(default=0)
+    lease_token: Mapped[UUID | None]
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested: Mapped[bool] = mapped_column(default=False)
+    inventory_ready: Mapped[bool] = mapped_column(default=False)
+    fingerprint_key_version: Mapped[int | None]
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

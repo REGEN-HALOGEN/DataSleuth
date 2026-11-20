@@ -19,6 +19,13 @@ cd backend
 ../.venv-linux/bin/python -m app.serve
 ```
 
+For manual WSL/Linux startup, start the scan worker in another terminal
+from `backend`:
+
+```bash
+../.venv-linux/bin/python -m app.workers.scan
+```
+
 In a separate terminal, use a native Node installation for your platform.
 From `frontend`, run `npm ci` and `npm run dev`. Open
 `http://127.0.0.1:5173`. Windows and WSL require separate installations of
@@ -49,4 +56,4 @@ The suite exercises the real browser, API, database, and session cookie.
 
 Stop application processes with Ctrl+C and services with `docker compose stop`.
 Do not use `docker compose down -v`: named volumes contain persistent data.
-The foundation supports authentication. Worker, scanning, and demo seeding are later milestones.
+The scan worker supports WSL/Linux. Demo seeding and the browser scan workflow are later work.

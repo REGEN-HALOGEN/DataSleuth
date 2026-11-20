@@ -16,6 +16,9 @@ EVENTS = frozenset(
         "dependency_unavailable",
         "startup_failed",
         "account_operation_failed",
+        "scan_worker_started",
+        "scan_worker_storage_unavailable",
+        "scan_worker_stopped_unexpectedly",
     }
 )
 

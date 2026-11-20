@@ -21,7 +21,8 @@ On Ubuntu, from `backend`:
 The initial `0001_baseline` migration is intentionally empty. Revision
 `0002_auth` adds `users` and `browser_sessions`. Revision `0003_scan_sources`
 adds `scan_sources` and `audit_events`. Revision `0004_scan_findings` adds
-scan jobs, scanned-file metadata, fingerprints, and masked findings. Run `upgrade head` to apply
+scan jobs, scanned-file metadata, fingerprints, and masked findings. Revision
+`0005_scan_queue` adds job retry, lease, and cancellation data. Run `upgrade head` to apply
 the pending revisions. Use `alembic current` to verify which revision is applied. SQLAlchemy's session factory provides `sessions.begin()`
 for commit/rollback and connection cleanup. Redis uses its client pool.
 
