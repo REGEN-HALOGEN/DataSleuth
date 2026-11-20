@@ -46,7 +46,13 @@ def test_filtered_masked_findings_and_audited_review(services):
                         expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
                     )
                 )
-            job = ScanJob(source_id=source.id, created_by=user.id, status="completed")
+            job = ScanJob(
+                source_id=source.id,
+                created_by=user.id,
+                status="completed",
+                files_processed=2,
+                findings_created=2,
+            )
             db.add(job)
             db.flush()
             fixtures = []
@@ -74,6 +80,14 @@ def test_filtered_masked_findings_and_audited_review(services):
         client.cookies.set(COOKIE_NAME, tokens["viewer"])
         assert client.get(href).status_code == 403
         client.cookies.set(COOKIE_NAME, tokens["analyst"])
+        overview = client.get("/api/v1/overview").json()
+        assert overview["files_processed"] >= 2
+        assert overview["findings_awaiting_review"] >= 2
+        assert any(row["id"] == str(job.id) for row in overview["recent_scans"])
+        assert any(
+            row["category"] == "email" and row["count"] >= 2
+            for row in overview["categories"]
+        )
         filtered = client.get(
             PREFIX,
             params={"scan_id": str(job.id), "extension": "txt", "min_confidence": 0.9},
@@ -138,3 +152,7 @@ def test_filtered_masked_findings_and_audited_review(services):
         ]
         assert all(event["reviewer"] == user.username for event in detail["history"])
         assert detail["related_count"] == 1
+        assert (
+            client.get("/api/v1/overview").json()["findings_awaiting_review"]
+            == overview["findings_awaiting_review"] - 1
+        )

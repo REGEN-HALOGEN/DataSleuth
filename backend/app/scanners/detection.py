@@ -100,3 +100,10 @@ def detect(text: str, key: bytes) -> list[Candidate]:
                     )
                 )
     return findings
+
+
+def redact_metadata(value: str) -> str:
+    """Mask detectable identifiers embedded in display metadata."""
+    for _, pattern, _ in DETECTORS:
+        value = pattern.sub("[redacted]", value)
+    return value

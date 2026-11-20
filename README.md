@@ -119,6 +119,12 @@ record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
 
+### 2026-11-20 — Operational overview
+
+- Added live overview totals, recent scans, finding categories, and a link
+  to findings awaiting review. Metrics come from stored scanner and review
+  data.
+
 ### 2026-11-20 — Findings inventory and review
 
 - Added Discoveries with paginated, filterable masked findings and links from

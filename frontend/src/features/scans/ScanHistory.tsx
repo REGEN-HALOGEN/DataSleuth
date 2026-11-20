@@ -1,16 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { ApiError } from "../../lib/api";
-import { scans, type Scan } from "./api";
-
-const statusLabels: Record<Scan["status"], string> = {
-  queued: "Queued",
-  running: "Running",
-  completed: "Completed",
-  completed_with_errors: "Completed with errors",
-  failed: "Failed",
-  cancelled: "Cancelled",
-};
+import { scans, scanStatusLabels, type Scan } from "./api";
 
 const explanations: Record<string, string> = {
   source_unavailable: "The source or operator was no longer available.",
@@ -130,7 +121,7 @@ export function ScanHistory({ onExpired }: { onExpired: () => void }) {
                   <td>
                     {job.cancel_requested && job.status === "running"
                       ? "Cancelling"
-                      : statusLabels[job.status]}
+                      : scanStatusLabels[job.status]}
                     {job.inventory_limited && (
                       <small>Entry limit reached</small>
                     )}

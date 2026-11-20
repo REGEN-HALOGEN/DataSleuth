@@ -14,6 +14,7 @@ from sqlalchemy import text
 
 from app.api.auth import router as auth_router
 from app.api.findings import router as findings_router
+from app.api.overview import router as overview_router
 from app.api.scans import router as scans_router
 from app.api.sources import router as sources_router
 from app.core.auth import password_hasher
@@ -67,6 +68,7 @@ app.include_router(auth_router)
 app.include_router(sources_router)
 app.include_router(scans_router)
 app.include_router(findings_router)
+app.include_router(overview_router)
 
 
 @app.middleware("http")

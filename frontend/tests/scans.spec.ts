@@ -83,4 +83,18 @@ test("scan an approved directory and review correlated discoveries", async ({
   await page.reload();
   await expect(page.getByLabel("Review status")).toHaveValue("confirmed");
   await expect(page.getByLabel("Review history")).toContainText("Confirmed by");
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Recent scans" }),
+  ).toBeVisible();
+  const overviewScan = page.getByRole("row").filter({
+    has: page.getByRole("rowheader", { name: renamedName, exact: true }),
+  });
+  await expect(
+    overviewScan.getByRole("cell", { name: "Completed", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "View findings awaiting review" })
+    .click();
+  await expect(page.getByLabel("Review status")).toHaveValue("needs_review");
 });

@@ -15,7 +15,16 @@ export function Discoveries({ onExpired }: { onExpired: () => void }) {
   const [search] = useSearchParams();
   const scanId = search.get("scan");
   const [sources, setSources] = useState<ScanSource[]>([]);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    const review = search.get("review");
+    const category = search.get("category");
+    if (review && Object.hasOwn(reviewLabels, review))
+      initial.review_status = review;
+    if (category && Object.hasOwn(categoryLabels, category))
+      initial.category = category;
+    return initial;
+  });
   const [offset, setOffset] = useState(0);
   const [results, setResults] = useState<{ items: Finding[]; total: number }>();
   const [error, setError] = useState(false);
@@ -86,7 +95,7 @@ export function Discoveries({ onExpired }: { onExpired: () => void }) {
         </label>
         <label>
           Category
-          <select name="category">
+          <select name="category" defaultValue={filters.category ?? ""}>
             <option value="">All</option>
             {Object.entries(categoryLabels).map(([value, label]) => (
               <option key={value} value={value}>
@@ -129,7 +138,10 @@ export function Discoveries({ onExpired }: { onExpired: () => void }) {
         </label>
         <label>
           Review status
-          <select name="review_status">
+          <select
+            name="review_status"
+            defaultValue={filters.review_status ?? ""}
+          >
             <option value="">All</option>
             {Object.entries(reviewLabels).map(([value, label]) => (
               <option key={value} value={value}>

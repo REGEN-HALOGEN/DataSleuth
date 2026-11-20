@@ -2,7 +2,6 @@ import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
-  Link,
   Navigate,
   NavLink,
   Outlet,
@@ -14,6 +13,7 @@ import {
 import { Accounts } from "./features/auth/Accounts";
 import { auth, AuthError, type Account } from "./features/auth/api";
 import { SignIn } from "./features/auth/SignIn";
+import { Overview } from "./features/scans/Overview";
 import { ScanHistory } from "./features/scans/ScanHistory";
 import { ScanSources } from "./features/scans/ScanSources";
 import { Discoveries } from "./features/findings/Discoveries";
@@ -216,30 +216,27 @@ function App() {
         <Route
           index
           element={
-            <>
-              <h1>Overview</h1>
-              <div className="notice">
-                <h2>Local scans</h2>
-                {canScan ? (
-                  <p>
-                    <Link to="/sources">Choose an approved directory</Link> or{" "}
-                    <Link to="/scans">view scan history</Link>.
-                  </p>
-                ) : (
+            canScan ? (
+              <Overview onExpired={expire} />
+            ) : (
+              <>
+                <h1>Overview</h1>
+                <div className="notice">
+                  <h2>Local scans</h2>
                   <p>
                     An administrator or analyst account is required to manage
                     scans.
                   </p>
-                )}
-              </div>
-            </>
+                </div>
+              </>
+            )
           }
         />
         <Route
           path="discoveries"
           element={
             canScan ? (
-              <Discoveries onExpired={expire} />
+              <Discoveries key={location.search} onExpired={expire} />
             ) : (
               <>
                 <h1>Discoveries</h1>

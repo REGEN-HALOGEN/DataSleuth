@@ -282,3 +282,26 @@ td {
 .finding-details dd {
   margin: 0;
 }
+
+.overview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  background: white;
+  border: 1px solid #dce1e8;
+  margin: 16px 0 24px;
+}
+.overview-metrics div {
+  padding: 14px;
+}
+.overview-metrics dd {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}

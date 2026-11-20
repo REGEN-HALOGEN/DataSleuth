@@ -7,7 +7,7 @@ Last updated: 2026-11-20
 - [x] **0 — Foundation:** localhost infrastructure, validated configuration, pooled connections, migrations, health endpoints, fail-closed logging, local account provisioning, authentication, server-side RBAC, protected frontend routes, and automated verification.
 - [x] **1 — Safe source and scanner foundation:** source API, bounded scanner, persisted jobs, WSL/Linux worker, retries, and cancellation verified.
 - [ ] **2 — Detection and privacy protections:** deterministic detectors, masked evidence, and analyst access to versioned correlation are implemented and verified.
-- [ ] **3 — Inventory and analyst workflow:** source management, scan history, findings inventory, audited review, and related-occurrence tables are implemented. Operational overview metrics are pending.
+- [x] **3 — Inventory and analyst workflow:** source management, scan history, findings inventory, audited review, related-occurrence tables, and operational overview are implemented and verified.
 - [ ] **4 — Reporting and demonstration:** pending.
 
 ## Scanner foundation progress
@@ -87,11 +87,20 @@ Last updated: 2026-11-20
   PostgreSQL, Redis, and worker. The migration from `0005_scan_queue` applied
   cleanly, and Alembic detected no schema drift.
 
+## Operational overview
+
+- Overview displays persisted source and scan totals, processed file counts,
+  findings awaiting review, recent scans, and findings by category. Links
+  open the applicable filtered Discoveries views.
+- Backend checks verified that reviewing a finding updates the awaiting
+  review count. Chromium verified that a completed scan appears in Overview
+  and that its review link opens the filtered inventory.
+
 ## Next phase work
 
-Build real overview metrics and masked CSV/JSON exports, then exercise the
-documented acceptance workflow with a reproducible synthetic demo. Native
-Windows worker execution is pending.
+Build masked CSV/JSON exports and exercise the documented acceptance
+workflow with a reproducible synthetic demo. Native Windows worker
+execution is pending.
 
 ## Milestone 0 implementation
 

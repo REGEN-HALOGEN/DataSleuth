@@ -14,7 +14,7 @@ from app.api.sources import Operator
 from app.models.auth import User
 from app.models.scan import Finding, ScannedFile, ScanJob
 from app.models.source import AuditEvent, ScanSource
-from app.scanners.detection import DETECTORS
+from app.scanners.detection import redact_metadata
 
 router = APIRouter(prefix="/api/v1/findings", tags=["findings"])
 ReviewStatus = Literal["needs_review", "confirmed", "false_positive", "follow_up"]
@@ -79,9 +79,7 @@ class FindingItem(BaseModel):
     @field_validator("relative_path", "source_name")
     @classmethod
     def redact_detectable_metadata(cls, value: str) -> str:
-        for _, pattern, _ in DETECTORS:
-            value = pattern.sub("[redacted]", value)
-        return value
+        return redact_metadata(value)
 
 
 class FindingPage(BaseModel):

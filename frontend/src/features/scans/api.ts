@@ -43,3 +43,12 @@ export const scans = {
   cancel: (id: string) =>
     request<Scan>(`scans/${id}/cancel`, { method: "POST" }),
 };
+
+export const scanStatusLabels: Record<Scan["status"], string> = {
+  queued: "Queued",
+  running: "Running",
+  completed: "Completed",
+  completed_with_errors: "Completed with errors",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
