@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     String,
@@ -69,6 +70,12 @@ class DataFingerprint(Base):
 
 class Finding(Base):
     __tablename__ = "findings"
+    __table_args__ = (
+        CheckConstraint(
+            "review_status IN ('needs_review', 'confirmed', 'false_positive', 'follow_up')",
+            name="ck_findings_review_status",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     scanned_file_id: Mapped[UUID] = mapped_column(
@@ -82,3 +89,8 @@ class Finding(Base):
     confidence: Mapped[float]
     location: Mapped[int]
     masked_evidence: Mapped[str] = mapped_column(String(32))
+    review_status: Mapped[str] = mapped_column(
+        String(16), server_default="needs_review", index=True
+    )
+    reviewed_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

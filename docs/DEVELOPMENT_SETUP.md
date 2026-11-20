@@ -55,8 +55,10 @@ From `frontend`, run `npx playwright install chromium` and `npm test`.
 The suite exercises the real browser, API, database, and session cookie.
 To include the scan workflow, start the worker and set
 `DATASLEUTH_E2E_SCAN_SOURCE` to an unregistered approved absolute directory
-containing one TXT file with one synthetic email address. Use a fresh fixture
-directory or disposable database for repeat runs.
+containing `synthetic.txt` with the same synthetic email address on two lines.
+The default fixture value is `synthetic-browser-person@example.invalid`.
+For repeat runs in the same disposable database, use a fresh directory and
+a unique synthetic address, and set `DATASLEUTH_E2E_SCAN_VALUE` to the address.
 
 Stop application processes with Ctrl+C and services with `docker compose stop`.
 Do not use `docker compose down -v`: named volumes contain persistent data.

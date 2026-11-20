@@ -6,8 +6,8 @@ Last updated: 2026-11-20
 
 - [x] **0 — Foundation:** localhost infrastructure, validated configuration, pooled connections, migrations, health endpoints, fail-closed logging, local account provisioning, authentication, server-side RBAC, protected frontend routes, and automated verification.
 - [x] **1 — Safe source and scanner foundation:** source API, bounded scanner, persisted jobs, WSL/Linux worker, retries, and cancellation verified.
-- [ ] **2 — Detection and privacy protections:** first deterministic detectors, redacted evidence, and keyed correlation implemented. Analyst access to occurrences and further privacy verification are pending.
-- [ ] **3 — Inventory and analyst workflow:** browser source and scan history screens implemented. Findings inventory, review, and relationship views are pending.
+- [ ] **2 — Detection and privacy protections:** deterministic detectors, masked evidence, and analyst access to versioned correlation are implemented and verified.
+- [ ] **3 — Inventory and analyst workflow:** source management, scan history, findings inventory, audited review, and related-occurrence tables are implemented. Operational overview metrics are pending.
 - [ ] **4 — Reporting and demonstration:** pending.
 
 ## Scanner foundation progress
@@ -72,10 +72,26 @@ Last updated: 2026-11-20
   passed against the live API and worker with synthetic data, including adding,
   disabling, enabling, and renaming a source and verifying real result counts.
 
+## Findings inventory and review
+
+- Admins and analysts can filter by category, source, file type, confidence,
+  review status, UTC scan dates, and scan ID. Search terms are sent in the
+  request body. Findings return masked evidence and relative metadata, with
+  detector-based redaction applied to displayed paths and source names.
+- Migration `0006_finding_review` defaults findings to needs review. Review
+  changes store the actor and timestamp with an audit event. The workflow
+  uses structured review states and omits free-text review notes.
+- Related occurrences are shown in a paginated table from the selected
+  finding. The API keeps fingerprint digests, keys, and absolute paths private.
+- Verified 33 backend tests and five Chromium tests across the live API,
+  PostgreSQL, Redis, and worker. The migration from `0005_scan_queue` applied
+  cleanly, and Alembic detected no schema drift.
+
 ## Next phase work
 
-Build the findings inventory, review actions, and inspection of related
-occurrences with masked evidence. Native Windows worker execution is pending.
+Build real overview metrics and masked CSV/JSON exports, then exercise the
+documented acceptance workflow with a reproducible synthetic demo. Native
+Windows worker execution is pending.
 
 ## Milestone 0 implementation
 
@@ -97,4 +113,4 @@ occurrences with masked evidence. Native Windows worker execution is pending.
 
 - Account provisioning is add-only and local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
-- Browser scan launch and history are available. Findings can be counted in Scan History. Review and related-occurrence views remain pending.
+- Browser scan launch, history, reviews, and related occurrences are available. Reports and the synthetic acceptance workflow are pending.

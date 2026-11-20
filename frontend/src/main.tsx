@@ -9,18 +9,24 @@ import {
   Route,
   Routes,
   useLocation,
+  useMatch,
 } from "react-router";
 import { Accounts } from "./features/auth/Accounts";
 import { auth, AuthError, type Account } from "./features/auth/api";
 import { SignIn } from "./features/auth/SignIn";
 import { ScanHistory } from "./features/scans/ScanHistory";
 import { ScanSources } from "./features/scans/ScanSources";
+import { Discoveries } from "./features/findings/Discoveries";
+import { DiscoveryDetail } from "./features/findings/DiscoveryDetail";
 import "./styles/main.css";
+
+const discoveryPath = /^\/discoveries\/[0-9a-f-]{36}$/i;
 
 const pageTitles: Record<string, string> = {
   "/": "Overview",
   "/accounts": "Accounts",
   "/sources": "Scan Sources",
+  "/discoveries": "Discoveries",
   "/scans": "Scan History",
 };
 
@@ -63,6 +69,7 @@ function Shell({
           </NavLink>
           {account.role !== "viewer" && (
             <>
+              <NavLink to="/discoveries">Discoveries</NavLink>
               <NavLink to="/sources">Scan Sources</NavLink>
               <NavLink to="/scans">Scan History</NavLink>
             </>
@@ -74,7 +81,12 @@ function Shell({
       </aside>
       <main>
         <header className="topbar">
-          <strong>{pageTitles[location.pathname] ?? "Overview"}</strong>
+          <strong>
+            {pageTitles[location.pathname] ??
+              (discoveryPath.test(location.pathname)
+                ? "Discoveries"
+                : "Overview")}
+          </strong>
           <div className="account-controls">
             <span>{account.username}</span>
             <button onClick={logout} disabled={signingOut}>
@@ -100,6 +112,7 @@ function App() {
   const [unavailable, setUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const expire = useCallback(() => setAccount(null), []);
+  const discoveryId = useMatch("/discoveries/:id")?.params.id;
   const location = useLocation();
 
   useEffect(() => {
@@ -169,7 +182,8 @@ function App() {
 
   const returnPath: unknown = location.state?.from;
   const requestedPath =
-    typeof returnPath === "string" && Object.hasOwn(pageTitles, returnPath)
+    typeof returnPath === "string" &&
+    (Object.hasOwn(pageTitles, returnPath) || discoveryPath.test(returnPath))
       ? returnPath
       : "/";
   const canScan = account?.role === "admin" || account?.role === "analyst";
@@ -219,6 +233,40 @@ function App() {
                 )}
               </div>
             </>
+          }
+        />
+        <Route
+          path="discoveries"
+          element={
+            canScan ? (
+              <Discoveries onExpired={expire} />
+            ) : (
+              <>
+                <h1>Discoveries</h1>
+                <p role="alert">Operator access is required.</p>
+              </>
+            )
+          }
+        />
+        <Route
+          path="discoveries/:id"
+          element={
+            canScan ? (
+              discoveryId && discoveryPath.test(location.pathname) ? (
+                <DiscoveryDetail
+                  key={discoveryId}
+                  id={discoveryId}
+                  onExpired={expire}
+                />
+              ) : (
+                <p role="alert">This discovery could not be found.</p>
+              )
+            ) : (
+              <>
+                <h1>Discoveries</h1>
+                <p role="alert">Operator access is required.</p>
+              </>
+            )
           }
         />
         <Route

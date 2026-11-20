@@ -145,7 +145,18 @@ export function ScanHistory({ onExpired }: { onExpired: () => void }) {
                   <td>{job.files_processed}</td>
                   <td>{job.files_skipped}</td>
                   <td>{job.files_failed}</td>
-                  <td>{job.findings_created}</td>
+                  <td>
+                    {job.findings_created > 0 ? (
+                      <Link
+                        aria-label={`View ${job.findings_created} findings`}
+                        to={`/discoveries?scan=${job.id}`}
+                      >
+                        {job.findings_created}
+                      </Link>
+                    ) : (
+                      0
+                    )}
+                  </td>
                   <td>
                     {(job.status === "queued" || job.status === "running") &&
                       !job.cancel_requested && (

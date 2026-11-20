@@ -239,3 +239,46 @@ td {
   display: block;
   margin-top: 4px;
 }
+
+.finding-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin: 16px 0;
+}
+.finding-filters label {
+  display: grid;
+  gap: 4px;
+  min-width: 120px;
+}
+.finding-filters input {
+  margin-bottom: 0;
+}
+.finding-filters select,
+.finding-details + .notice select {
+  min-height: 35px;
+  max-width: 220px;
+  font: inherit;
+  background: #fff;
+  color: #202938;
+  border: 1px solid #8798ae;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.pagination,
+.related-occurrences {
+  margin-top: 16px;
+}
+.finding-details {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
+  gap: 6px 14px;
+  overflow-wrap: anywhere;
+}
+.finding-details dt {
+  font-weight: 600;
+}
+.finding-details dd {
+  margin: 0;
+}

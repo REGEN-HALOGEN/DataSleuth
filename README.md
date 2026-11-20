@@ -32,6 +32,8 @@ To try a scan, set `ALLOWED_SCAN_ROOTS` in the local `.env` to a JSON list
 of approved absolute WSL paths and restart the app. Open **Scan Sources**,
 register an approved directory, and confirm a read-only scan. **Scan History**
 shows live counts and lets operators cancel queued or running scans.
+Open **Discoveries** to filter masked findings, review individual results,
+and inspect related occurrences.
 
 Keep the terminal open while using DataSleuth. Ctrl+C stops the API, frontend, and
 scan worker. Run `docker compose stop` separately to stop PostgreSQL and Redis.
@@ -116,6 +118,15 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-20 — Findings inventory and review
+
+- Added Discoveries with paginated, filterable masked findings and links from
+  Scan History to scan-specific results.
+- Added persistent review status and audit history, and related-occurrence
+  tables for findings that share a versioned fingerprint.
+- Added migration `0006_finding_review`. Existing findings default to
+  **Needs review**. WSL startup applies the migration automatically.
 
 ### 2026-11-20 — Browser scan workflow
 
