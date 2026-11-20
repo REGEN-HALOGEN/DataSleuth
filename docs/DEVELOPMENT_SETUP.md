@@ -53,7 +53,11 @@ the same synthetic passphrase. Set `DATASLEUTH_E2E_ADMIN`,
 `DATASLEUTH_E2E_VIEWER`, and `DATASLEUTH_E2E_PASSWORD` to match those accounts.
 From `frontend`, run `npx playwright install chromium` and `npm test`.
 The suite exercises the real browser, API, database, and session cookie.
+To include the scan workflow, start the worker and set
+`DATASLEUTH_E2E_SCAN_SOURCE` to an unregistered approved absolute directory
+containing one TXT file with one synthetic email address. Use a fresh fixture
+directory or disposable database for repeat runs.
 
 Stop application processes with Ctrl+C and services with `docker compose stop`.
 Do not use `docker compose down -v`: named volumes contain persistent data.
-The scan worker supports WSL/Linux. Demo seeding and the browser scan workflow are later work.
+The scan worker supports WSL/Linux. Demo seeding is later work.

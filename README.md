@@ -28,6 +28,11 @@ passphrase of 10–256 characters. Press Enter at the username prompt to use `lo
 no preset password. Sign in at `http://127.0.0.1:5173` with the credentials you
 just chose. Subsequent runs reuse your existing accounts.
 
+To try a scan, set `ALLOWED_SCAN_ROOTS` in the local `.env` to a JSON list
+of approved absolute WSL paths and restart the app. Open **Scan Sources**,
+register an approved directory, and confirm a read-only scan. **Scan History**
+shows live counts and lets operators cancel queued or running scans.
+
 Keep the terminal open while using DataSleuth. Ctrl+C stops the API, frontend, and
 scan worker. Run `docker compose stop` separately to stop PostgreSQL and Redis.
 The script preserves existing frontend dependency directories under
@@ -112,6 +117,14 @@ record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
 
+### 2026-11-20 — Browser scan workflow
+
+- Added protected Scan Sources and Scan History screens for administrators
+  and analysts. Operators can manage approved directories, confirm scan
+  launches, follow persisted progress, and cancel jobs.
+- Verified a full browser scan against the running worker, including source
+  registration, enable/disable, rename, and actual finding counts.
+
 ### 2026-11-20 — Background scan processing
 
 - Added authenticated scan launch, status, history, and cancellation endpoints
@@ -122,7 +135,7 @@ changes, and push the commit to GitHub before starting the next objective.
   Cancelling a scan keeps committed results and discards in-flight output.
 - `start.sh` now runs the worker and applies migration `0005_scan_queue`.
   Start the worker separately with `python -m app.workers.scan` for a manual
-  WSL/Linux setup. Browser scan controls are pending.
+  WSL/Linux setup.
 
 ### 2026-11-20 — Bounded readers and masked findings
 
@@ -138,7 +151,7 @@ changes, and push the commit to GitHub before starting the next objective.
   applies the migration. Manual setup requires reinstalling backend
   dependencies and running `alembic upgrade head`.
 - The pipeline is available to trusted backend code. Scan launch, progress,
-  cancellation, and findings views are pending.
+  cancellation, and findings views were pending at this checkpoint.
 
 ### 2026-11-20 — Scanner foundation begins
 

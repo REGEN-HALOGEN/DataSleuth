@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
+  Link,
   Navigate,
   NavLink,
   Outlet,
@@ -12,7 +13,16 @@ import {
 import { Accounts } from "./features/auth/Accounts";
 import { auth, AuthError, type Account } from "./features/auth/api";
 import { SignIn } from "./features/auth/SignIn";
+import { ScanHistory } from "./features/scans/ScanHistory";
+import { ScanSources } from "./features/scans/ScanSources";
 import "./styles/main.css";
+
+const pageTitles: Record<string, string> = {
+  "/": "Overview",
+  "/accounts": "Accounts",
+  "/sources": "Scan Sources",
+  "/scans": "Scan History",
+};
 
 function Shell({
   account,
@@ -51,6 +61,12 @@ function Shell({
           <NavLink to="/" end>
             Overview
           </NavLink>
+          {account.role !== "viewer" && (
+            <>
+              <NavLink to="/sources">Scan Sources</NavLink>
+              <NavLink to="/scans">Scan History</NavLink>
+            </>
+          )}
           {account.role === "admin" && (
             <NavLink to="/accounts">Accounts</NavLink>
           )}
@@ -58,9 +74,7 @@ function Shell({
       </aside>
       <main>
         <header className="topbar">
-          <strong>
-            {location.pathname === "/accounts" ? "Accounts" : "Overview"}
-          </strong>
+          <strong>{pageTitles[location.pathname] ?? "Overview"}</strong>
           <div className="account-controls">
             <span>{account.username}</span>
             <button onClick={logout} disabled={signingOut}>
@@ -153,8 +167,13 @@ function App() {
       </main>
     );
 
+  const returnPath: unknown = location.state?.from;
   const requestedPath =
-    location.state?.from === "/accounts" ? "/accounts" : "/";
+    typeof returnPath === "string" && Object.hasOwn(pageTitles, returnPath)
+      ? returnPath
+      : "/";
+  const canScan = account?.role === "admin" || account?.role === "analyst";
+
   return (
     <Routes>
       <Route
@@ -186,13 +205,46 @@ function App() {
             <>
               <h1>Overview</h1>
               <div className="notice">
-                <h2>Discovery workflow</h2>
-                <p>
-                  Scanning and findings are unavailable in this development
-                  build.
-                </p>
+                <h2>Local scans</h2>
+                {canScan ? (
+                  <p>
+                    <Link to="/sources">Choose an approved directory</Link> or{" "}
+                    <Link to="/scans">view scan history</Link>.
+                  </p>
+                ) : (
+                  <p>
+                    An administrator or analyst account is required to manage
+                    scans.
+                  </p>
+                )}
               </div>
             </>
+          }
+        />
+        <Route
+          path="sources"
+          element={
+            canScan ? (
+              <ScanSources onExpired={expire} />
+            ) : (
+              <>
+                <h1>Scan Sources</h1>
+                <p role="alert">Operator access is required.</p>
+              </>
+            )
+          }
+        />
+        <Route
+          path="scans"
+          element={
+            canScan ? (
+              <ScanHistory onExpired={expire} />
+            ) : (
+              <>
+                <h1>Scan History</h1>
+                <p role="alert">Operator access is required.</p>
+              </>
+            )
           }
         />
         <Route

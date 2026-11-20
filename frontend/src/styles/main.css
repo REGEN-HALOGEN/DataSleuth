@@ -205,3 +205,37 @@ td {
   text-align: left;
   overflow-wrap: anywhere;
 }
+
+.source-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.source-form input {
+  margin-bottom: 0;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.row-actions .primary {
+  margin-top: 0;
+}
+.scan-confirmation {
+  margin-top: 16px;
+}
+.scan-confirmation .row-actions {
+  margin-top: 12px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.table-scroll td {
+  font-variant-numeric: tabular-nums;
+}
+.table-scroll td small {
+  display: block;
+  margin-top: 4px;
+}

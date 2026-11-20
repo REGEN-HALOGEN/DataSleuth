@@ -7,7 +7,7 @@ Last updated: 2026-11-20
 - [x] **0 — Foundation:** localhost infrastructure, validated configuration, pooled connections, migrations, health endpoints, fail-closed logging, local account provisioning, authentication, server-side RBAC, protected frontend routes, and automated verification.
 - [x] **1 — Safe source and scanner foundation:** source API, bounded scanner, persisted jobs, WSL/Linux worker, retries, and cancellation verified.
 - [ ] **2 — Detection and privacy protections:** first deterministic detectors, redacted evidence, and keyed correlation implemented. Analyst access to occurrences and further privacy verification are pending.
-- [ ] **3 — Inventory and analyst workflow:** pending.
+- [ ] **3 — Inventory and analyst workflow:** browser source and scan history screens implemented. Findings inventory, review, and relationship views are pending.
 - [ ] **4 — Reporting and demonstration:** pending.
 
 ## Scanner foundation progress
@@ -63,11 +63,19 @@ Last updated: 2026-11-20
   worker fencing, cooperative cancellation, and retry exhaustion. Migration
   from `0004_scan_findings` had no schema drift.
 
+## Browser scan workflow
+
+- Admin and analyst sessions can manage sources, confirm scan starts, see
+  live file and finding counts, and request cancellation. Scan History shows
+  the latest 50 jobs and refreshes from the persisted API.
+- ESLint, Prettier, TypeScript, and the Vite build passed. Five Chromium tests
+  passed against the live API and worker with synthetic data, including adding,
+  disabling, enabling, and renaming a source and verifying real result counts.
+
 ## Next phase work
 
-Connect Scan Sources and Scan History to the API, then build the analyst
-inventory and related-occurrence views with masked evidence. Native Windows
-worker execution is pending.
+Build the findings inventory, review actions, and inspection of related
+occurrences with masked evidence. Native Windows worker execution is pending.
 
 ## Milestone 0 implementation
 
@@ -89,4 +97,4 @@ worker execution is pending.
 
 - Account provisioning is add-only and local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
-- Scan launch and progress are available through the authenticated API. Browser scan controls and analyst workflows remain pending.
+- Browser scan launch and history are available. Findings can be counted in Scan History. Review and related-occurrence views remain pending.
