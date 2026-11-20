@@ -97,6 +97,21 @@ PostgreSQL and Redis. Stop frontend and backend with Ctrl+C. In Ubuntu, run
 `docker compose stop` from the project root to stop services without removing
 containers or volumes.
 
+## Recover local administrator access
+
+Use the configured browser origin, which defaults to
+`http://127.0.0.1:5173`. To reset an existing active administrator password
+from WSL, run this from the project root with PostgreSQL running:
+
+```bash
+cd backend
+../.venv-linux/bin/python -m app.manage_users --reset-admin-password YOUR_USERNAME
+```
+
+Enter the new password twice at the hidden prompts. The reset revokes existing
+sessions for the account. On Windows use `..\.venv\Scripts\python.exe` with
+the same module and arguments.
+
 ## Tests and troubleshooting
 
 From `backend`, run `..\.venv\Scripts\python.exe -m pytest` and
@@ -118,6 +133,11 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-20 — Local administrator recovery
+
+- Added a hidden-prompt administrator password reset that revokes existing
+  sessions for that account.
 
 ### 2026-11-20 — Operational overview
 

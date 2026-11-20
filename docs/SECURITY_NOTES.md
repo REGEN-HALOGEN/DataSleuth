@@ -4,7 +4,8 @@
 
 - Accounts are provisioned through `python -m app.manage_users` from a trusted
   terminal. The prompt refuses to fall back to visible password input. Passwords
-  are stored as salted Argon2id hashes. Provisioning is add-only.
+  are stored as salted Argon2id hashes. The local administrator reset uses
+  the same hidden terminal prompt and revokes that account's existing sessions.
 - Sessions expire after eight hours. Logout and reauthentication revoke the
   presented session. PostgreSQL stores only digests of random session tokens.
   Cookies are host-only, `HttpOnly`, scoped to `/api/v1`, and

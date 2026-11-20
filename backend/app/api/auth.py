@@ -118,6 +118,10 @@ def login(credentials: Credentials, request: Request, response: Response):
             valid = verify_password(encoded, password)
             if not valid or user is None or not user.active:
                 raise HTTPException(401, "Invalid username or password")
+            # Serialize session issuance against a concurrent local password reset.
+            db.refresh(user, with_for_update=True)
+            if not user.active or user.password_hash != encoded:
+                raise HTTPException(401, "Invalid username or password")
             if password_hasher.check_needs_rehash(encoded):
                 user.password_hash = password_hasher.hash(password)
         finally:

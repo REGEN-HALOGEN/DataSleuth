@@ -120,6 +120,6 @@ execution is pending.
 
 ## Limitations
 
-- Account provisioning is add-only and local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
+- Account provisioning and administrator password recovery are local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
 - Browser scan launch, history, reviews, and related occurrences are available. Reports and the synthetic acceptance workflow are pending.

@@ -5,14 +5,14 @@ from getpass import GetPassWarning, getpass
 import logging
 import warnings
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.auth import normalize_username, password_hasher
 from app.core.config import load_config
 from app.core.logging import configure_logging
 from app.db.session import create_database
-from app.models.auth import User
+from app.models.auth import BrowserSession, User
 
 
 def check_admin() -> None:
@@ -43,6 +43,7 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check-admin", action="store_true")
     mode.add_argument("--bootstrap-admin", action="store_true")
+    mode.add_argument("--reset-admin-password", action="store_true")
     mode.add_argument("--role", choices=("admin", "analyst", "viewer"))
     args = parser.parse_args()
     if args.check_admin:
@@ -51,9 +52,9 @@ def main() -> None:
         check_admin()
         return
     if not args.username:
-        parser.error("username is required to create an account")
+        parser.error("username is required")
     role = "admin" if args.bootstrap_admin else args.role
-    password_minimum = 10 if args.bootstrap_admin else 15
+    password_minimum = 10 if args.bootstrap_admin or args.reset_admin_password else 15
     try:
         username = normalize_username(args.username)
     except ValueError as error:
@@ -76,13 +77,32 @@ def main() -> None:
         engine, sessions = create_database(load_config()["DATABASE_URL"])
         try:
             with sessions.begin() as db:
-                db.add(
-                    User(
-                        username=username,
-                        role=role,
-                        password_hash=password_hasher.hash(password),
+                if args.reset_admin_password:
+                    user = db.scalar(
+                        select(User)
+                        .where(
+                            User.username == username,
+                            User.role == "admin",
+                            User.active.is_(True),
+                        )
+                        .with_for_update()
                     )
-                )
+                    if user is None:
+                        raise SystemExit(
+                            "No active administrator with that username was found."
+                        )
+                    user.password_hash = password_hasher.hash(password)
+                    db.execute(
+                        delete(BrowserSession).where(BrowserSession.user_id == user.id)
+                    )
+                else:
+                    db.add(
+                        User(
+                            username=username,
+                            role=role,
+                            password_hash=password_hasher.hash(password),
+                        )
+                    )
         finally:
             engine.dispose()
     except IntegrityError:
@@ -92,9 +112,13 @@ def main() -> None:
     except Exception:
         logging.getLogger("datasleuth").error("account_operation_failed")
         raise SystemExit(
-            "Account creation failed. Check database configuration and migrations."
+            "Account operation failed. Check database configuration and migrations."
         ) from None
-    print("Account created.")
+    print(
+        "Administrator password reset. Existing sessions revoked."
+        if args.reset_admin_password
+        else "Account created."
+    )
 
 
 if __name__ == "__main__":

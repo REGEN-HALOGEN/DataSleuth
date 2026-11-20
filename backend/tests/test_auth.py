@@ -158,3 +158,22 @@ def test_login_fails_closed_if_throttling_unavailable(accounts, monkeypatch):
         assert response.status_code == 503
         assert "synthetic credential" not in response.text
         assert COOKIE_NAME not in client.cookies
+
+
+def test_local_admin_reset_revokes_sessions(accounts, monkeypatch):
+    from app import manage_users
+
+    admin = accounts["admin"]
+    replacement = "synthetic replacement passphrase"
+    with TestClient(app) as client:
+        assert post_login(client, admin.username).status_code == 200
+        monkeypatch.setattr(
+            "sys.argv", ["manage_users", "--reset-admin-password", admin.username]
+        )
+        monkeypatch.setattr(manage_users, "getpass", lambda prompt: replacement)
+        manage_users.main()
+        assert client.get(f"{PREFIX}/me").status_code == 401
+        assert post_login(client, admin.username).status_code == 401
+        assert (
+            post_login(client, admin.username, password=replacement).status_code == 200
+        )
