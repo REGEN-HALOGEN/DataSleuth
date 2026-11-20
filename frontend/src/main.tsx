@@ -1,30 +1,223 @@
-import React from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  BrowserRouter,
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router";
+import { Accounts } from "./features/auth/Accounts";
+import { auth, AuthError, type Account } from "./features/auth/api";
+import { SignIn } from "./features/auth/SignIn";
 import "./styles/main.css";
 
-function App() {
+function Shell({
+  account,
+  onExpired,
+}: {
+  account: Account;
+  onExpired: () => void;
+}) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState("");
+  const location = useLocation();
+
+  async function logout() {
+    setSigningOut(true);
+    setError("");
+    try {
+      await auth.logout();
+      onExpired();
+    } catch {
+      setError("Sign-out could not be confirmed. Try again.");
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar" aria-label="Product">
-        <div className="brand"><span className="mark" aria-hidden="true">D</span> DataSleuth</div>
-        <p className="sidebar-label">PRIVACY ENGINEERING</p>
-        <p className="active">Project foundation</p>
-        <div className="sidebar-footer">Local development</div>
+        <div className="brand">
+          <span className="mark" aria-hidden="true">
+            D
+          </span>{" "}
+          DataSleuth
+        </div>
+        <nav aria-label="Main navigation">
+          <NavLink to="/" end>
+            Overview
+          </NavLink>
+          {account.role === "admin" && (
+            <NavLink to="/accounts">Accounts</NavLink>
+          )}
+        </nav>
       </aside>
       <main>
-        <header className="topbar">DataSleuth <span>/</span> Project foundation</header>
-        <section className="content">
-          <p className="eyebrow">DEVELOPMENT BUILD</p>
-          <h1>Project foundation</h1>
-          <p className="intro">The discovery workflow is not available yet.</p>
-          <div className="notice">
-            <h2>Building the foundation</h2>
-            <p>This local development build does not scan files or store findings. Implementation progress and limitations are tracked in Project_Docs/IMPLEMENTATION_STATUS.md.</p>
+        <header className="topbar">
+          <strong>
+            {location.pathname === "/accounts" ? "Accounts" : "Overview"}
+          </strong>
+          <div className="account-controls">
+            <span>{account.username}</span>
+            <button onClick={logout} disabled={signingOut}>
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
           </div>
+        </header>
+        <section className="content">
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <Outlet />
         </section>
       </main>
     </div>
   );
 }
 
-createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
+function App() {
+  const [account, setAccount] = useState<Account | null>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const expire = useCallback(() => setAccount(null), []);
+  const location = useLocation();
+
+  useEffect(() => {
+    let active = true;
+    auth.current().then(
+      (result) => {
+        if (active) setAccount(result);
+      },
+      (failure: unknown) => {
+        if (!active) return;
+        if (failure instanceof AuthError && failure.status === 401) expire();
+        else setUnavailable(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [attempt, expire]);
+
+  useEffect(() => {
+    if (!account) return;
+    let active = true;
+    function checkSession() {
+      auth.current().then(
+        (result) => {
+          if (
+            active &&
+            (result.id !== account?.id || result.role !== account.role)
+          )
+            setAccount(result);
+        },
+        (failure: unknown) => {
+          if (active && failure instanceof AuthError && failure.status === 401)
+            expire();
+        },
+      );
+    }
+    window.addEventListener("focus", checkSession);
+    const timer = window.setInterval(checkSession, 60_000);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", checkSession);
+      window.clearInterval(timer);
+    };
+  }, [account, expire]);
+
+  if (unavailable)
+    return (
+      <main className="content">
+        <p role="alert">Your session could not be checked.</p>
+        <button
+          onClick={() => {
+            setUnavailable(false);
+            setAttempt(attempt + 1);
+          }}
+        >
+          Try again
+        </button>
+      </main>
+    );
+  if (account === undefined)
+    return (
+      <main className="content" role="status">
+        Checking session…
+      </main>
+    );
+
+  const requestedPath =
+    location.state?.from === "/accounts" ? "/accounts" : "/";
+  return (
+    <Routes>
+      <Route
+        path="/sign-in"
+        element={
+          account ? (
+            <Navigate to={requestedPath} replace />
+          ) : (
+            <SignIn onSignIn={setAccount} />
+          )
+        }
+      />
+      <Route
+        element={
+          account ? (
+            <Shell account={account} onExpired={expire} />
+          ) : (
+            <Navigate
+              to="/sign-in"
+              replace
+              state={{ from: location.pathname }}
+            />
+          )
+        }
+      >
+        <Route
+          index
+          element={
+            <>
+              <h1>Overview</h1>
+              <div className="notice">
+                <h2>Discovery workflow</h2>
+                <p>
+                  Scanning and findings are unavailable in this development
+                  build.
+                </p>
+              </div>
+            </>
+          }
+        />
+        <Route
+          path="accounts"
+          element={
+            account?.role === "admin" ? (
+              <Accounts onExpired={expire} />
+            ) : (
+              <>
+                <h1>Accounts</h1>
+                <p role="alert">Administrator access is required.</p>
+              </>
+            )
+          }
+        />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>,
+);

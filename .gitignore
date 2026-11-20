@@ -1,7 +1,13 @@
+# Local environment files at any level. Keep the root placeholder template.
 .env
 .env.*
-!.env.example
+.envrc
+.envrc.*
+*.env
+*.env.*
+!/.env.example
 .venv/
+.venv-linux/
 __pycache__/
 *.egg-info/
 *.py[cod]
