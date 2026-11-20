@@ -8,7 +8,7 @@ Last updated: 2026-11-20
 - [x] **1 — Safe source and scanner foundation:** source API, bounded scanner, persisted jobs, WSL/Linux worker, retries, and cancellation verified.
 - [ ] **2 — Detection and privacy protections:** deterministic detectors, masked evidence, and analyst access to versioned correlation are implemented and verified.
 - [x] **3 — Inventory and analyst workflow:** source management, scan history, findings inventory, audited review, related-occurrence tables, and operational overview are implemented and verified.
-- [ ] **4 — Reporting and demonstration:** masked CSV/JSON exports implemented. Reproducible demo and full acceptance verification are pending.
+- [x] **4 — Reporting and demonstration:** masked CSV/JSON exports and the reproducible WSL synthetic acceptance workflow are implemented and verified.
 
 ## Scanner foundation progress
 
@@ -109,10 +109,15 @@ Last updated: 2026-11-20
   after a synthetic scan and review. Backend tests covered empty reports,
   limits, audit records, origin checks, and private field exclusion.
 
-## Next phase work
+## Synthetic acceptance demo
 
-Exercise the documented acceptance workflow using a reproducible synthetic
-demo. Native Windows worker execution is pending.
+- `scripts/seed_demo.py` creates labelled TXT, CSV, JSON, PDF, and XLSX files
+  with synthetic duplicate values and a deliberate false positive. It also
+  creates unsupported, oversized, malformed, and permission fixtures.
+- The acceptance test used a real worker and disposable PostgreSQL and Redis.
+  It verified file outcomes, read-only behavior, filtering, correlation,
+  audited review, both export formats, and persistence across API lifecycles.
+  See [the demo guide](../docs/DEMO.md) for the browser workflow.
 
 ## Milestone 0 implementation
 
@@ -134,4 +139,4 @@ demo. Native Windows worker execution is pending.
 
 - Account provisioning and administrator password recovery are local. The WSL startup script prompts for the first administrator when needed. The default development browser origin uses loopback HTTP.
 - Start with `bash start.sh` on WSL to apply pending migrations automatically, or run `alembic upgrade head` during manual setup. Migration verification used disposable databases.
-- Browser scan launch, history, reviews, and related occurrences are available. Masked reports are available. The synthetic acceptance workflow is pending.
+- Browser scan launch, history, reviews, and related occurrences are available. The synthetic acceptance workflow is available on WSL/Linux. Native Windows worker execution remains pending.

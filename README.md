@@ -98,6 +98,11 @@ PostgreSQL and Redis. Stop frontend and backend with Ctrl+C. In Ubuntu, run
 `docker compose stop` from the project root to stop services without removing
 containers or volumes.
 
+## Synthetic demo
+
+Generate labelled fixtures and try the scan, review, export, and restart
+workflow in a disposable instance. See [the demo guide](docs/DEMO.md).
+
 ## Recover local administrator access
 
 Use the configured browser origin, which defaults to
@@ -134,6 +139,12 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-20 — Synthetic acceptance demo
+
+- Added a generator for clearly labelled, mixed-format synthetic documents.
+- Verified file outcomes, related findings, review audit history, masked
+  CSV and JSON exports, and persistence after an application restart.
 
 ### 2026-11-20 — Masked reports
 
