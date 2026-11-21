@@ -7,6 +7,7 @@
 *.env.*
 !/.env.example
 /cert/
+/Project_Docs/
 .venv/
 .venv-linux/
 __pycache__/
