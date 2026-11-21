@@ -129,3 +129,55 @@ test("scan an approved directory and review correlated discoveries", async ({
     .click();
   await expect(page.getByLabel("Review status")).toHaveValue("needs_review");
 });
+
+test("upload a private document, scan it and request deletion", async ({
+  page,
+}) => {
+  test.skip(
+    process.env.DATASLEUTH_E2E_UPLOAD !== "1",
+    "Requires a disposable private storage bucket.",
+  );
+  if (!admin || !password) throw new Error("Configure the synthetic operator.");
+  await page.goto("/sources");
+  await page.getByLabel("Username").fill(admin);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  const label = `Private synthetic ${Date.now()}`;
+  await page.getByLabel("Document label").fill(label);
+  await page.getByLabel("Document", { exact: true }).setInputFiles({
+    name: "synthetic.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("private-browser@example.invalid\n"),
+  });
+  await page.getByRole("button", { name: "Upload document" }).click();
+  const row = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("rowheader", { name: label, exact: true }) });
+  await expect(
+    row.getByRole("cell", { name: "Enabled", exact: true }),
+  ).toBeVisible();
+  await row.getByRole("button", { name: "Start scan" }).click();
+  await page.getByRole("button", { name: "Confirm and start" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Scan History" }),
+  ).toBeVisible();
+  // The history UI shows a UUID reference. Poll the scoped API for this source's job.
+  const result = await page.request.get("/api/v1/sources");
+  const sources: ScanSourceRecord[] = await result.json();
+  const source = sources.find((s) => s.name === label);
+  expect(source).toBeDefined();
+  await expect
+    .poll(async () => {
+      const scans = await (await page.request.get("/api/v1/scans")).json();
+      return scans.find(
+        (scan: { source_id: string }) => scan.source_id === source?.id,
+      )?.status;
+    })
+    .toBe("completed");
+  await page.goto("/sources");
+  page.once("dialog", (dialog) => dialog.accept());
+  await row.getByRole("button", { name: "Delete document" }).click();
+  await expect(row.getByText("Deletion requested")).toBeVisible();
+});
+
+type ScanSourceRecord = { id: string; name: string };

@@ -8,10 +8,22 @@ export type Account = {
   role: "admin" | "analyst" | "viewer";
 };
 
+export type SessionAccount = Account & {
+  organisation_id: string;
+  organisation_name: string;
+};
+
 export const auth = {
-  current: () => request<Account>("auth/me"),
-  login: (username: string, password: string) =>
-    request<Account>("auth/login", jsonRequest("POST", { username, password })),
+  current: () => request<SessionAccount>("auth/me"),
+  login: (username: string, password: string, organisationId?: string) =>
+    request<SessionAccount>(
+      "auth/login",
+      jsonRequest("POST", {
+        username,
+        password,
+        organisation_id: organisationId,
+      }),
+    ),
   logout: () => request<void>("auth/logout", { method: "POST" }),
   users: () => request<Account[]>("auth/users"),
 };

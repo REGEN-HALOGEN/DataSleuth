@@ -4,12 +4,23 @@ export class ApiError extends Error {
   }
 }
 
+let expectedOrganisation: string | undefined;
+
+export function setSessionOrganisation(organisationId?: string) {
+  expectedOrganisation = organisationId;
+}
+
 export async function fetchApi(
   path: string,
   options?: RequestInit,
 ): Promise<Response> {
+  const headers = new Headers(options?.headers);
+  if (expectedOrganisation && path !== "auth/me" && path !== "auth/login") {
+    headers.set("X-DataSleuth-Organisation", expectedOrganisation);
+  }
   const response = await fetch(`/api/v1/${path}`, {
     ...options,
+    headers,
     credentials: "same-origin",
     cache: "no-store",
   });
@@ -21,6 +32,10 @@ export async function request<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
+  const headers = new Headers(options?.headers);
+  if (expectedOrganisation && path !== "auth/me" && path !== "auth/login") {
+    headers.set("X-DataSleuth-Organisation", expectedOrganisation);
+  }
   const response = await fetchApi(path, options);
   return (response.status === 204 ? undefined : await response.json()) as T;
 }

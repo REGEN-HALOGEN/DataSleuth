@@ -11,7 +11,7 @@ import {
   useMatch,
 } from "react-router";
 import { Accounts } from "./features/auth/Accounts";
-import { auth, AuthError, type Account } from "./features/auth/api";
+import { auth, AuthError, type SessionAccount } from "./features/auth/api";
 import { SignIn } from "./features/auth/SignIn";
 import { Overview } from "./features/scans/Overview";
 import { ScanHistory } from "./features/scans/ScanHistory";
@@ -20,6 +20,7 @@ import { Discoveries } from "./features/findings/Discoveries";
 import { DiscoveryDetail } from "./features/findings/DiscoveryDetail";
 import { Reports } from "./features/reports/Reports";
 import "./styles/main.css";
+import { setSessionOrganisation } from "./lib/api";
 
 const discoveryPath = /^\/discoveries\/[0-9a-f-]{36}$/i;
 
@@ -36,7 +37,7 @@ function Shell({
   account,
   onExpired,
 }: {
-  account: Account;
+  account: SessionAccount;
   onExpired: () => void;
 }) {
   const [signingOut, setSigningOut] = useState(false);
@@ -91,6 +92,7 @@ function Shell({
                 : "Overview")}
           </strong>
           <div className="account-controls">
+            <span>{account.organisation_name}</span>
             <span>{account.username}</span>
             <button onClick={logout} disabled={signingOut}>
               {signingOut ? "Signing out…" : "Sign out"}
@@ -111,10 +113,14 @@ function Shell({
 }
 
 function App() {
-  const [account, setAccount] = useState<Account | null>();
+  const [account, updateAccount] = useState<SessionAccount | null>();
+  const setAccount = useCallback((value: SessionAccount | null) => {
+    setSessionOrganisation(value?.organisation_id);
+    updateAccount(value);
+  }, []);
   const [unavailable, setUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const expire = useCallback(() => setAccount(null), []);
+  const expire = useCallback(() => setAccount(null), [setAccount]);
   const discoveryId = useMatch("/discoveries/:id")?.params.id;
   const location = useLocation();
 
@@ -133,7 +139,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [attempt, expire]);
+  }, [attempt, expire, setAccount]);
 
   useEffect(() => {
     if (!account) return;
@@ -143,7 +149,9 @@ function App() {
         (result) => {
           if (
             active &&
-            (result.id !== account?.id || result.role !== account.role)
+            (result.id !== account?.id ||
+              result.role !== account.role ||
+              result.organisation_id !== account.organisation_id)
           )
             setAccount(result);
         },
@@ -160,7 +168,7 @@ function App() {
       window.removeEventListener("focus", checkSession);
       window.clearInterval(timer);
     };
-  }, [account, expire]);
+  }, [account, expire, setAccount]);
 
   if (unavailable)
     return (
@@ -206,7 +214,11 @@ function App() {
       <Route
         element={
           account ? (
-            <Shell account={account} onExpired={expire} />
+            <Shell
+              key={account.id + account.organisation_id + account.role}
+              account={account}
+              onExpired={expire}
+            />
           ) : (
             <Navigate
               to="/sign-in"

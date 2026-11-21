@@ -7,9 +7,11 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.manage_users import create_member
+from app.models.organisation import LOCAL_ORGANISATION
 from app.core.auth import COOKIE_NAME, new_token, token_digest
 from app.main import app
-from app.models.auth import BrowserSession, User
+from app.models.auth import BrowserSession
 from app.models.source import AuditEvent
 
 PREFIX = "/api/v1/sources"
@@ -27,8 +29,12 @@ def test_source_lifecycle_and_access(services, tmp_path, monkeypatch):
         with app.state.sessions.begin() as db:
             actor = None
             for role in ("analyst", "viewer"):
-                user = User(
-                    username=f"source-{uuid4().hex}", role=role, password_hash="unused"
+                user = create_member(
+                    db,
+                    organisation_id=LOCAL_ORGANISATION,
+                    username=f"source-{uuid4().hex}",
+                    role=role,
+                    password_hash="unused",
                 )
                 db.add(user)
                 db.flush()
@@ -38,6 +44,7 @@ def test_source_lifecycle_and_access(services, tmp_path, monkeypatch):
                 tokens[role] = token
                 db.add(
                     BrowserSession(
+                        organisation_id=LOCAL_ORGANISATION,
                         token_digest=token_digest(token),
                         user_id=user.id,
                         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
@@ -78,7 +85,7 @@ def test_source_lifecycle_and_access(services, tmp_path, monkeypatch):
             ]
             is False
         )
-        app.state.scan_roots = ()
+        app.state.scan_roots = {}
         assert (
             client.patch(href, headers=ORIGIN, json={"enabled": True}).status_code
             == 422

@@ -7,9 +7,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
+from app.manage_users import create_member
+from app.models.organisation import LOCAL_ORGANISATION
 from app.core.config import load_config
 from app.db.session import create_database
-from app.models.auth import User
 from app.models.scan import DataFingerprint, Finding, ScanJob, ScannedFile
 from app.models.source import AuditEvent, ScanSource
 from app.scanners.pipeline import ScanError, execute_scan
@@ -29,13 +30,25 @@ def test_end_to_end_scan_and_versioned_findings(services, tmp_path):
     engine, sessions = create_database(config["DATABASE_URL"])
     try:
         with sessions.begin() as db:
-            analyst = User(
-                username=f"test-{uuid4().hex}", role="analyst", password_hash="unused"
+            analyst = create_member(
+                db,
+                organisation_id=LOCAL_ORGANISATION,
+                username=f"test-{uuid4().hex}",
+                role="analyst",
+                password_hash="unused",
             )
-            viewer = User(
-                username=f"test-{uuid4().hex}", role="viewer", password_hash="unused"
+            viewer = create_member(
+                db,
+                organisation_id=LOCAL_ORGANISATION,
+                username=f"test-{uuid4().hex}",
+                role="viewer",
+                password_hash="unused",
             )
-            source = ScanSource(name="Synthetic scan", configured_path=str(tmp_path))
+            source = ScanSource(
+                organisation_id=LOCAL_ORGANISATION,
+                name="Synthetic scan",
+                configured_path=str(tmp_path),
+            )
             db.add_all([analyst, viewer, source])
             db.flush()
             analyst_id, viewer_id, source_id = analyst.id, viewer.id, source.id

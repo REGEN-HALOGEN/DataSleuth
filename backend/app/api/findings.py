@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.auth import require_browser_origin
 from app.api.sources import Operator
 from app.models.auth import User
+from app.models.organisation import owned_row
 from app.models.scan import Finding, ScannedFile, ScanJob
 from app.models.source import AuditEvent, ScanSource
 from app.scanners.detection import redact_metadata
@@ -120,20 +121,23 @@ FINDING_FIELDS = (
 )
 
 
-def findings_query(*columns):
+def findings_query(organisation_id, *columns):
     return (
         select(*columns)
         .select_from(Finding)
+        .where(Finding.organisation_id == organisation_id)
         .join(ScannedFile, Finding.scanned_file_id == ScannedFile.id)
         .join(ScanJob, ScannedFile.scan_job_id == ScanJob.id)
         .join(ScanSource, ScanJob.source_id == ScanSource.id)
     )
 
 
-def page(db: Session, conditions: list, limit: int, offset: int) -> FindingPage:
-    total = db.scalar(findings_query(func.count()).where(*conditions))
+def page(
+    db: Session, organisation_id: UUID, conditions: list, limit: int, offset: int
+) -> FindingPage:
+    total = db.scalar(findings_query(organisation_id, func.count()).where(*conditions))
     rows = db.execute(
-        findings_query(*FINDING_FIELDS)
+        findings_query(organisation_id, *FINDING_FIELDS)
         .where(*conditions)
         .order_by(ScanJob.started_at.desc(), Finding.id)
         .offset(offset)
@@ -180,17 +184,19 @@ def finding_conditions(filters: FindingScope, term: str = "") -> list:
     return conditions
 
 
-def filtered_page(request: Request, filters: FindingFilters, term: str = ""):
+def filtered_page(
+    request: Request, organisation_id: UUID, filters: FindingFilters, term: str = ""
+):
     conditions = finding_conditions(filters, term)
     with request.app.state.sessions() as db:
-        return page(db, conditions, filters.limit, filters.offset)
+        return page(db, organisation_id, conditions, filters.limit, filters.offset)
 
 
 @router.get("", response_model=FindingPage)
 def list_findings(
     request: Request, operator: Operator, filters: Annotated[FindingFilters, Query()]
 ):
-    return filtered_page(request, filters)
+    return filtered_page(request, operator.organisation_id, filters)
 
 
 @router.post(
@@ -199,11 +205,12 @@ def list_findings(
     dependencies=[Depends(require_browser_origin)],
 )
 def search_findings(payload: FindingSearch, request: Request, operator: Operator):
-    return filtered_page(request, payload, payload.term)
+    return filtered_page(request, operator.organisation_id, payload, payload.term)
 
 
 def related_conditions(job_finding: Finding):
     return [
+        Finding.organisation_id == job_finding.organisation_id,
         Finding.fingerprint_id == job_finding.fingerprint_id,
         Finding.id != job_finding.id,
     ]
@@ -212,11 +219,15 @@ def related_conditions(job_finding: Finding):
 @router.get("/{finding_id}", response_model=FindingDetail)
 def finding_detail(finding_id: UUID, request: Request, operator: Operator):
     with request.app.state.sessions() as db:
-        finding = db.get(Finding, finding_id)
+        finding = owned_row(db, Finding, finding_id, operator.organisation_id)
         if finding is None:
             raise HTTPException(404, "Finding not found")
         row = (
-            db.execute(findings_query(*FINDING_FIELDS).where(Finding.id == finding_id))
+            db.execute(
+                findings_query(operator.organisation_id, *FINDING_FIELDS).where(
+                    Finding.id == finding_id
+                )
+            )
             .mappings()
             .one()
         )
@@ -224,6 +235,7 @@ def finding_detail(finding_id: UUID, request: Request, operator: Operator):
             select(AuditEvent.action, User.username, AuditEvent.created_at)
             .join(User, User.id == AuditEvent.actor_id)
             .where(
+                AuditEvent.organisation_id == operator.organisation_id,
                 AuditEvent.entity_type == "finding",
                 AuditEvent.entity_id == finding_id,
                 AuditEvent.action.in_(REVIEW_ACTIONS),
@@ -259,10 +271,12 @@ def related_findings(
     offset: Annotated[int, Query(ge=0, le=10_000_000)] = 0,
 ):
     with request.app.state.sessions() as db:
-        finding = db.get(Finding, finding_id)
+        finding = owned_row(db, Finding, finding_id, operator.organisation_id)
         if finding is None:
             raise HTTPException(404, "Finding not found")
-        return page(db, related_conditions(finding), limit, offset)
+        return page(
+            db, operator.organisation_id, related_conditions(finding), limit, offset
+        )
 
 
 @router.patch(
@@ -274,7 +288,9 @@ def review_finding(
     finding_id: UUID, payload: ReviewRequest, request: Request, operator: Operator
 ):
     with request.app.state.sessions.begin() as db:
-        finding = db.get(Finding, finding_id, with_for_update=True)
+        finding = owned_row(
+            db, Finding, finding_id, operator.organisation_id, lock=True
+        )
         if finding is None:
             raise HTTPException(404, "Finding not found")
         if finding.review_status != payload.status:
@@ -284,6 +300,7 @@ def review_finding(
             finding.reviewed_at = now
             db.add(
                 AuditEvent(
+                    organisation_id=operator.organisation_id,
                     actor_id=operator.id,
                     entity_type="finding",
                     entity_id=finding.id,
@@ -293,7 +310,11 @@ def review_finding(
             )
             db.flush()
         return (
-            db.execute(findings_query(*FINDING_FIELDS).where(Finding.id == finding_id))
+            db.execute(
+                findings_query(operator.organisation_id, *FINDING_FIELDS).where(
+                    Finding.id == finding_id
+                )
+            )
             .mappings()
             .one()
         )

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.api.auth import require_browser_origin
 from app.api.sources import Operator
 from app.models.scan import ScanJob
+from app.models.organisation import owned_row
 from app.workers.queue import ScanError, cancel, enqueue, notify
 
 router = APIRouter(prefix="/api/v1/scans", tags=["scans"])
@@ -46,8 +47,16 @@ class ScanResponse(BaseModel):
     dependencies=[Depends(require_browser_origin)],
 )
 def start_scan(payload: ScanRequest, request: Request, operator: Operator):
+    bucket = request.app.state.bucket
     try:
-        job = enqueue(request.app.state.sessions, payload.source_id, operator.id)
+        job = enqueue(
+            request.app.state.sessions,
+            payload.source_id,
+            operator.id,
+            operator.organisation_id,
+            namespace=bucket.namespace if bucket else None,
+            local_access=operator.organisation_id in request.app.state.scan_roots,
+        )
     except ScanError as error:
         raise HTTPException(409, str(error)) from None
     notify(request.app.state.redis)
@@ -64,6 +73,7 @@ def list_scans(
     with request.app.state.sessions() as db:
         return db.scalars(
             select(ScanJob)
+            .where(ScanJob.organisation_id == operator.organisation_id)
             .order_by(ScanJob.started_at.desc(), ScanJob.id)
             .limit(limit)
             .offset(offset)
@@ -73,7 +83,7 @@ def list_scans(
 @router.get("/{job_id}", response_model=ScanResponse)
 def get_scan(job_id: UUID, request: Request, operator: Operator):
     with request.app.state.sessions() as db:
-        job = db.get(ScanJob, job_id)
+        job = owned_row(db, ScanJob, job_id, operator.organisation_id)
         if job is None:
             raise HTTPException(404, "Scan not found")
         return job
@@ -85,7 +95,9 @@ def get_scan(job_id: UUID, request: Request, operator: Operator):
     dependencies=[Depends(require_browser_origin)],
 )
 def cancel_scan(job_id: UUID, request: Request, operator: Operator):
-    job = cancel(request.app.state.sessions, job_id, operator.id)
+    job = cancel(
+        request.app.state.sessions, job_id, operator.id, operator.organisation_id
+    )
     if job is None:
         raise HTTPException(404, "Scan not found")
     notify(request.app.state.redis)

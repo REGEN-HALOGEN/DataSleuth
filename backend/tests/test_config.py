@@ -20,3 +20,16 @@ def test_invalid_scan_roots_rejected(monkeypatch):
     monkeypatch.setenv("ALLOWED_SCAN_ROOTS", '["relative/path"]')
     with pytest.raises(ValueError):
         load_config()
+
+
+def test_root_grants_reject_cross_organisation_overlap(tmp_path, monkeypatch):
+    import json
+    from uuid import uuid4
+
+    (tmp_path / "child").mkdir()
+    monkeypatch.setenv("ALLOWED_SCAN_ROOTS", json.dumps([str(tmp_path)]))
+    monkeypatch.setenv(
+        "ORGANISATION_SCAN_ROOTS", json.dumps({str(uuid4()): [str(tmp_path / "child")]})
+    )
+    with pytest.raises(ValueError, match="Invalid configuration"):
+        load_config()

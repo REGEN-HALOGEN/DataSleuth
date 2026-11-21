@@ -46,16 +46,21 @@ class OverviewResponse(BaseModel):
 @router.get("", response_model=OverviewResponse)
 def overview(request: Request, operator: Operator):
     with request.app.state.sessions() as db:
-        sources = db.scalar(select(func.count()).select_from(ScanSource))
+        sources = db.scalar(
+            select(func.count())
+            .select_from(ScanSource)
+            .where(ScanSource.organisation_id == operator.organisation_id)
+        )
         scans, files = db.execute(
             select(
                 func.count(ScanJob.id),
                 func.coalesce(func.sum(ScanJob.files_processed), 0),
-            )
+            ).where(ScanJob.organisation_id == operator.organisation_id)
         ).one()
         needs_review = db.scalar(
             select(func.count(Finding.id)).where(
-                Finding.review_status == "needs_review"
+                Finding.organisation_id == operator.organisation_id,
+                Finding.review_status == "needs_review",
             )
         )
         recent = db.execute(
@@ -68,12 +73,14 @@ def overview(request: Request, operator: Operator):
                 ScanJob.findings_created,
             )
             .join(ScanSource, ScanJob.source_id == ScanSource.id)
+            .where(ScanJob.organisation_id == operator.organisation_id)
             .order_by(ScanJob.started_at.desc(), ScanJob.id)
             .limit(5)
         ).mappings()
         count = func.count(Finding.id)
         categories = db.execute(
             select(Finding.category, count.label("count"))
+            .where(Finding.organisation_id == operator.organisation_id)
             .group_by(Finding.category)
             .order_by(count.desc(), Finding.category)
         ).mappings()

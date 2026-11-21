@@ -1,5 +1,7 @@
 """Open regular files beneath approved roots and extract text with a deadline."""
 
+from contextlib import contextmanager
+from typing import BinaryIO
 import os
 from pathlib import Path
 import stat
@@ -19,7 +21,13 @@ class ReadFailure(ValueError):
     """A fixed reason code suitable for storing with file metadata."""
 
 
-def read_bytes(source: Path, relative_path: Path, limit: int) -> bytes:
+@contextmanager
+def open_local_input(
+    configured_path: str, roots: tuple[Path, ...], relative_path: Path, limit: int
+):
+    if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
+        raise ReadFailure("platform_unsupported")
+    source = approved_directory(configured_path, roots)
     if (
         relative_path.is_absolute()
         or not relative_path.parts
@@ -47,17 +55,16 @@ def read_bytes(source: Path, relative_path: Path, limit: int) -> bytes:
                     raise ReadFailure("changed")
                 if current.st_size > limit:
                     raise ReadFailure("too_large")
-                data = handle.read(limit + 1)
-                final = os.fstat(handle.fileno())
-                if (final.st_size, final.st_mtime_ns, final.st_ctime_ns) != (
-                    current.st_size,
-                    current.st_mtime_ns,
-                    current.st_ctime_ns,
-                ):
-                    raise ReadFailure("changed")
-                if len(data) > limit:
-                    raise ReadFailure("too_large")
-                return data
+                try:
+                    yield handle
+                finally:
+                    final = os.fstat(handle.fileno())
+                    if (final.st_size, final.st_mtime_ns, final.st_ctime_ns) != (
+                        current.st_size,
+                        current.st_mtime_ns,
+                        current.st_ctime_ns,
+                    ):
+                        raise ReadFailure("changed")
     except OSError:
         raise ReadFailure("unreadable") from None
 
@@ -70,18 +77,35 @@ def extract_text(
     max_file_size: int,
     timeout: int,
 ) -> str:
-    if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
-        raise ReadFailure("platform_unsupported")
-    extension = relative_path.suffix.lower()
+    limit = min(max_file_size, MAX_INPUT_BYTES)
+    with open_local_input(configured_path, roots, relative_path, limit) as handle:
+        return parse_input(handle, relative_path.suffix.lower(), limit, timeout)
+
+
+def parse_input(
+    handle: BinaryIO,
+    extension: str,
+    limit: int,
+    timeout: int,
+    *,
+    validate_only: bool = False,
+) -> str:
     if extension not in SUPPORTED_EXTENSIONS:
         raise ReadFailure("unsupported")
-    source = approved_directory(configured_path, roots)
-    limit = min(max_file_size, MAX_INPUT_BYTES)
-    data = read_bytes(source, relative_path, limit)
     try:
+        command = [
+            sys.executable,
+            "-I",
+            "-m",
+            "app.scanners.extract",
+            extension,
+            str(limit),
+        ]
+        if validate_only:
+            command.append("validate")
         result = subprocess.run(
-            [sys.executable, "-I", "-m", "app.scanners.extract", extension, str(limit)],
-            input=data,
+            command,
+            stdin=handle,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             timeout=timeout,

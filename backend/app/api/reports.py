@@ -99,6 +99,7 @@ def export_findings(
         rows = (
             db.execute(
                 findings_query(
+                    operator.organisation_id,
                     Finding.id.label("finding_id"),
                     ScanJob.source_id,
                     ScanJob.id.label("scan_id"),
@@ -140,6 +141,7 @@ def export_findings(
         body = encode_csv(report) if format == "csv" else report.model_dump_json()
         db.add(
             AuditEvent(
+                organisation_id=operator.organisation_id,
                 actor_id=operator.id,
                 entity_type="finding_report",
                 entity_id=report.report_id,

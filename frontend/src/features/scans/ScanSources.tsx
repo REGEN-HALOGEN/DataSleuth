@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "../../lib/api";
+import { UploadDocument } from "./UploadDocument";
 import { scans, type ScanSource } from "./api";
 
 export function ScanSources({ onExpired }: { onExpired: () => void }) {
@@ -120,6 +121,7 @@ export function ScanSources({ onExpired }: { onExpired: () => void }) {
           )}
         </div>
       </form>
+      <UploadDocument onSource={applySource} onExpired={onExpired} />
       {error && (
         <p role="alert" className="form-error">
           {error}
@@ -177,7 +179,7 @@ export function ScanSources({ onExpired }: { onExpired: () => void }) {
             <thead>
               <tr>
                 <th scope="col">Source</th>
-                <th scope="col">Directory</th>
+                <th scope="col">Location</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
               </tr>
@@ -186,8 +188,25 @@ export function ScanSources({ onExpired }: { onExpired: () => void }) {
               {sources.map((source) => (
                 <tr key={source.id}>
                   <th scope="row">{source.name}</th>
-                  <td>{source.configured_path}</td>
-                  <td>{source.enabled ? "Enabled" : "Disabled"}</td>
+                  <td>
+                    {source.configured_path ?? "Private storage"}
+                    {source.upload_state === "ready" && source.expires_at && (
+                      <div>
+                        Expires {new Date(source.expires_at).toLocaleString()}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {source.upload_state && source.upload_state !== "ready"
+                      ? {
+                          pending: "Awaiting upload",
+                          deleting: "Deletion requested",
+                          deleted: "Document deleted",
+                        }[source.upload_state]
+                      : source.enabled
+                        ? "Enabled"
+                        : "Disabled"}
+                  </td>
                   <td>
                     <div className="row-actions">
                       <button
@@ -208,22 +227,48 @@ export function ScanSources({ onExpired }: { onExpired: () => void }) {
                       >
                         Rename
                       </button>
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          void mutate(async () => {
-                            applySource(
-                              await scans.updateSource(source.id, {
-                                enabled: !source.enabled,
-                              }),
-                            );
-                            if (source.id === confirming?.id)
-                              setConfirming(undefined);
-                          }, "The source status could not be updated.")
-                        }
-                      >
-                        {source.enabled ? "Disable" : "Enable"}
-                      </button>
+                      {(!source.upload_state ||
+                        source.upload_state === "ready") && (
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void mutate(async () => {
+                              applySource(
+                                await scans.updateSource(source.id, {
+                                  enabled: !source.enabled,
+                                }),
+                              );
+                              if (source.id === confirming?.id)
+                                setConfirming(undefined);
+                            }, "The source status could not be updated.")
+                          }
+                        >
+                          {source.enabled ? "Disable" : "Enable"}
+                        </button>
+                      )}
+                      {(source.upload_state === "pending" ||
+                        source.upload_state === "ready") && (
+                        <button
+                          disabled={busy}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Delete the stored document? Existing findings and scan history will remain available.",
+                              )
+                            ) {
+                              void mutate(
+                                async () =>
+                                  applySource(
+                                    await scans.deleteDocument(source.id),
+                                  ),
+                                "Deletion could not be requested. Finish or cancel any active scan first.",
+                              );
+                            }
+                          }}
+                        >
+                          Delete document
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

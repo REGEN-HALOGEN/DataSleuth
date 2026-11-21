@@ -60,6 +60,8 @@ The default fixture value is `synthetic-browser-person@example.invalid`.
 For repeat runs in the same disposable database, use a fresh directory and
 a unique synthetic address, and set `DATASLEUTH_E2E_SCAN_VALUE` to the address.
 
+For the multi-organisation browser test, give the synthetic admin a viewer membership in a second disposable organisation and set `DATASLEUTH_E2E_ORGANISATION` to its UUID. Keep its original local administrator membership.
+
 Stop application processes with Ctrl+C and services with `docker compose stop`.
 Do not use `docker compose down -v`: named volumes contain persistent data.
 The scan worker supports WSL/Linux. Demo seeding is later work.

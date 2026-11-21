@@ -1,7 +1,7 @@
 """Run a confirmed local scan and persist metadata and masked occurrences."""
 
 from datetime import timedelta
-import json
+import hmac
 from pathlib import Path
 from uuid import UUID
 
@@ -9,12 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.auth import User
+from app.models.organisation import LOCAL_ORGANISATION, owned_row
+from app.core.config import organisation_roots
 from app.models.scan import DataFingerprint, Finding, ScannedFile
 from app.models.source import ScanSource
 from app.scanners.detection import Candidate, DetectionLimit, detect
-from app.scanners.discovery import InventoryEntry, SourcePathError, discover
-from app.scanners.readers import ReadFailure, extract_text
+from app.scanners.discovery import InventoryEntry, SourcePathError
+from app.scanners.readers import MAX_INPUT_BYTES, ReadFailure, parse_input
+from app.storage.sources import SourceInput, source_input
+from app.storage.supabase import PrivateBucket, StorageUnavailable
 from app.workers.queue import Claim, ScanError, claim_next, enqueue, finish, leased_job
 
 FILE_FAILURES = frozenset(
@@ -32,7 +35,11 @@ FILE_FAILURES = frozenset(
 
 
 def store_findings(
-    db, scanned_file: ScannedFile, candidates: list[Candidate], key_version: int
+    db,
+    scanned_file: ScannedFile,
+    candidates: list[Candidate],
+    key_version: int,
+    scheme: int,
 ) -> None:
     fingerprints = {}
     # Acquire matching fingerprint keys in a stable order across concurrent scans.
@@ -40,6 +47,8 @@ def store_findings(
         {(c.category, c.fingerprint) for c in candidates}
     ):
         fields = {
+            "organisation_id": scanned_file.organisation_id,
+            "scheme": scheme,
             "category": category,
             "key_version": key_version,
             "digest": fingerprint,
@@ -48,7 +57,13 @@ def store_findings(
             insert(DataFingerprint)
             .values(**fields)
             .on_conflict_do_nothing(
-                index_elements=["category", "key_version", "digest"]
+                index_elements=[
+                    "organisation_id",
+                    "scheme",
+                    "category",
+                    "key_version",
+                    "digest",
+                ]
             )
         )
         fingerprints[category, fingerprint] = db.scalar(
@@ -57,6 +72,7 @@ def store_findings(
     db.add_all(
         [
             Finding(
+                organisation_id=scanned_file.organisation_id,
                 scanned_file_id=scanned_file.id,
                 fingerprint_id=fingerprints[candidate.category, candidate.fingerprint],
                 category=candidate.category,
@@ -71,19 +87,23 @@ def store_findings(
 
 
 def process_file(
-    entry: InventoryEntry, path: str, roots: tuple[Path, ...], config: dict[str, str]
+    entry: InventoryEntry,
+    source: SourceInput,
+    config: dict[str, str],
+    fingerprint_key: bytes,
 ):
     if entry.status != "eligible":
         return entry.status, []
     try:
-        text = extract_text(
-            path,
-            roots,
-            entry.relative_path,
-            max_file_size=int(config["MAX_FILE_SIZE_BYTES"]),
-            timeout=int(config["MAX_PROCESSING_SECONDS_PER_FILE"]),
-        )
-        return "parsed", detect(text, config["HMAC_KEY"].encode("utf-8"))
+        limit = min(int(config["MAX_FILE_SIZE_BYTES"]), MAX_INPUT_BYTES)
+        with source.open_input(entry, limit) as handle:
+            text = parse_input(
+                handle,
+                entry.relative_path.suffix.lower(),
+                limit,
+                int(config["MAX_PROCESSING_SECONDS_PER_FILE"]),
+            )
+        return "parsed", detect(text, fingerprint_key)
     except ReadFailure as error:
         return str(error), []
     except DetectionLimit:
@@ -94,7 +114,7 @@ def lease_duration(config: dict[str, str]) -> timedelta:
     return timedelta(seconds=int(config["MAX_PROCESSING_SECONDS_PER_FILE"]) + 120)
 
 
-def snapshot_inventory(sessions, config, claim, path, roots) -> bool:
+def snapshot_inventory(sessions, config, claim, adapter) -> bool:
     with sessions.begin() as db:
         job = leased_job(db, claim)
         if job is None:
@@ -102,13 +122,7 @@ def snapshot_inventory(sessions, config, claim, path, roots) -> bool:
         if job.inventory_ready:
             return True
 
-    inventory = discover(
-        path,
-        roots,
-        max_depth=int(config["MAX_SCAN_DEPTH"]),
-        max_entries=int(config["MAX_FILES_PER_SCAN"]),
-        max_file_size=int(config["MAX_FILE_SIZE_BYTES"]),
-    )
+    inventory = adapter.inventory(config)
     pending = []
     invalid_names = 0
     for entry in inventory.entries:
@@ -120,6 +134,7 @@ def snapshot_inventory(sessions, config, claim, path, roots) -> bool:
             continue
         pending.append(
             {
+                "organisation_id": claim.organisation_id,
                 "scan_job_id": claim.job_id,
                 "relative_path": relative,
                 "size_bytes": entry.size_bytes,
@@ -140,7 +155,10 @@ def snapshot_inventory(sessions, config, claim, path, roots) -> bool:
                 pending,
             )
         statuses = db.scalars(
-            select(ScannedFile.parse_status).where(ScannedFile.scan_job_id == job.id)
+            select(ScannedFile.parse_status).where(
+                ScannedFile.organisation_id == claim.organisation_id,
+                ScannedFile.scan_job_id == job.id,
+            )
         ).all()
         job.files_discovered = len(statuses) + invalid_names
         job.files_processed = statuses.count("parsed")
@@ -157,11 +175,14 @@ def snapshot_inventory(sessions, config, claim, path, roots) -> bool:
     return True
 
 
-def process_pending(sessions, config, claim, path, roots, version) -> None:
+def process_pending(
+    sessions, config, claim, adapter, version, scheme, fingerprint_key
+) -> None:
     with sessions() as db:
         pending = db.execute(
             select(ScannedFile.id, ScannedFile.relative_path, ScannedFile.size_bytes)
             .where(
+                ScannedFile.organisation_id == claim.organisation_id,
                 ScannedFile.scan_job_id == claim.job_id,
                 ScannedFile.parse_status == "pending",
             )
@@ -172,19 +193,22 @@ def process_pending(sessions, config, claim, path, roots, version) -> None:
             if leased_job(db, claim) is None:
                 return
         status, candidates = process_file(
-            InventoryEntry(Path(relative), size, "eligible"), path, roots, config
+            InventoryEntry(Path(relative), size, "eligible"),
+            adapter,
+            config,
+            fingerprint_key,
         )
         with sessions.begin() as db:
             job = leased_job(db, claim)
             if job is None:
                 return
-            scanned_file = db.get(ScannedFile, file_id)
+            scanned_file = owned_row(db, ScannedFile, file_id, claim.organisation_id)
             scanned_file.parse_status = status
             if status == "parsed":
                 job.files_processed += 1
                 job.findings_created += len(candidates)
                 if candidates:
-                    store_findings(db, scanned_file, candidates, version)
+                    store_findings(db, scanned_file, candidates, version, scheme)
             elif status in FILE_FAILURES:
                 job.files_failed += 1
             else:
@@ -200,22 +224,25 @@ def process_pending(sessions, config, claim, path, roots, version) -> None:
             )
 
 
-def run_claim(sessions, config: dict[str, str], claim: Claim) -> None:
-    roots = tuple(Path(value) for value in json.loads(config["ALLOWED_SCAN_ROOTS"]))
+def run_claim(
+    sessions,
+    config: dict[str, str],
+    claim: Claim,
+    *,
+    roots: tuple[Path, ...] | None = None,
+) -> None:
+    if roots is None:
+        roots = organisation_roots(config).get(claim.organisation_id, ())
     version = int(config["HMAC_KEY_VERSION"])
     try:
         with sessions.begin() as db:
             job = leased_job(db, claim)
             if job is None:
                 return
-            source = db.get(ScanSource, job.source_id)
-            user = db.get(User, job.created_by)
-            if (
-                source is None
-                or not source.enabled
-                or user is None
-                or not user.active
-                or user.role not in {"admin", "analyst"}
+            source = owned_row(db, ScanSource, job.source_id, claim.organisation_id)
+            bucket = PrivateBucket.from_config(config)
+            if source is None or not source.can_scan(
+                bucket.namespace if bucket else None, True
             ):
                 finish(job, "failed", "source_unavailable")
                 return
@@ -223,25 +250,53 @@ def run_claim(sessions, config: dict[str, str], claim: Claim) -> None:
                 finish(job, "failed", "fingerprint_version_changed")
                 return
             job.fingerprint_key_version = version
-            path = source.configured_path
-        if snapshot_inventory(sessions, config, claim, path, roots):
-            process_pending(sessions, config, claim, path, roots, version)
+            scheme = job.fingerprint_scheme
+            master = config["HMAC_KEY"].encode("utf-8")
+            if scheme == 2:
+                fingerprint_key = hmac.digest(
+                    master,
+                    b"datasleuth/organisation-fingerprint/v2\0"
+                    + claim.organisation_id.bytes,
+                    "sha256",
+                )
+            elif scheme == 1 and claim.organisation_id == LOCAL_ORGANISATION:
+                fingerprint_key = master
+            else:
+                finish(job, "failed", "fingerprint_scheme_unknown")
+                return
+            adapter = source_input(source, roots, bucket)
+        if snapshot_inventory(sessions, config, claim, adapter):
+            process_pending(
+                sessions, config, claim, adapter, version, scheme, fingerprint_key
+            )
     except SourcePathError:
         with sessions.begin() as db:
             job = leased_job(db, claim)
             if job is not None:
                 finish(job, "failed", "source_unavailable")
-    except SQLAlchemyError:
+    except (SQLAlchemyError, StorageUnavailable):
         # Leave the persisted lease intact. An available worker can retry it.
         raise ScanError("Scan storage temporarily unavailable.") from None
 
 
 def execute_scan(
-    sessions, config: dict[str, str], source_id: UUID, actor_id: UUID
+    sessions,
+    config: dict[str, str],
+    source_id: UUID,
+    actor_id: UUID,
+    organisation_id: UUID = LOCAL_ORGANISATION,
 ) -> UUID:
     """Run a confirmed local scan synchronously from trusted code."""
-    job = enqueue(sessions, source_id, actor_id)
-    claim = claim_next(sessions, lease_duration(config), job_id=job.id)
+    bucket = PrivateBucket.from_config(config)
+    namespace = bucket.namespace if bucket else None
+    job = enqueue(sessions, source_id, actor_id, organisation_id, namespace=namespace)
+    claim = claim_next(
+        sessions,
+        lease_duration(config),
+        organisation_ids=(organisation_id,),
+        namespace=namespace,
+        job_id=job.id,
+    )
     if claim is not None:
         run_claim(sessions, config, claim)
     return job.id

@@ -21,6 +21,7 @@ from app.core.auth import (
     verify_password,
 )
 from app.models.auth import BrowserSession, User
+from app.models.organisation import Membership, Organisation, LOCAL_ORGANISATION
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 SESSION_LIFETIME = timedelta(hours=8)
@@ -28,6 +29,7 @@ password_checks = BoundedSemaphore(4)
 
 
 class Credentials(BaseModel):
+    organisation_id: UUID = LOCAL_ORGANISATION
     username: str = Field(max_length=128)
     password: SecretStr = Field(min_length=1, max_length=256)
 
@@ -36,6 +38,11 @@ class Account(BaseModel):
     id: UUID
     username: str
     role: str
+
+
+class SessionAccount(Account):
+    organisation_name: str
+    organisation_id: UUID
 
 
 def require_browser_origin(request: Request) -> None:
@@ -71,26 +78,53 @@ def request_digest(request: Request) -> str | None:
     return None
 
 
-def current_user(request: Request) -> User:
+def check_expected_organisation(request: Request, organisation_id: UUID) -> None:
+    expected = request.headers.get("X-DataSleuth-Organisation")
+    if expected is not None and expected != str(organisation_id):
+        raise HTTPException(409, "Session organisation changed. Refresh the page.")
+
+
+def current_user(request: Request) -> SessionAccount:
     digest = request_digest(request)
     if digest:
         with request.app.state.sessions() as db:
-            user = db.scalar(
-                select(User)
-                .join(BrowserSession, BrowserSession.user_id == User.id)
-                .where(
-                    BrowserSession.token_digest == digest,
-                    BrowserSession.expires_at > datetime.now(timezone.utc),
-                    User.active.is_(True),
+            user = (
+                db.execute(
+                    select(
+                        User.id,
+                        User.username,
+                        Membership.role,
+                        Membership.organisation_id,
+                        Organisation.name.label("organisation_name"),
+                    )
+                    .join(Membership, Membership.user_id == User.id)
+                    .join(Organisation, Organisation.id == Membership.organisation_id)
+                    .join(
+                        BrowserSession,
+                        (BrowserSession.user_id == User.id)
+                        & (
+                            BrowserSession.organisation_id == Membership.organisation_id
+                        ),
+                    )
+                    .where(
+                        BrowserSession.token_digest == digest,
+                        BrowserSession.expires_at > datetime.now(timezone.utc),
+                        User.active.is_(True),
+                    )
                 )
+                .mappings()
+                .one_or_none()
             )
             if user is not None:
-                return user
+                check_expected_organisation(request, user["organisation_id"])
+                return SessionAccount.model_validate(user)
     raise HTTPException(401, "Sign-in required")
 
 
 def require_roles(*allowed: str):
-    def authorize(user: Annotated[User, Depends(current_user)]) -> User:
+    def authorize(
+        user: Annotated[SessionAccount, Depends(current_user)],
+    ) -> SessionAccount:
         if user.role not in allowed:
             raise HTTPException(403, "Permission denied")
         return user
@@ -99,7 +133,9 @@ def require_roles(*allowed: str):
 
 
 @router.post(
-    "/login", response_model=Account, dependencies=[Depends(require_browser_origin)]
+    "/login",
+    response_model=SessionAccount,
+    dependencies=[Depends(require_browser_origin)],
 )
 def login(credentials: Credentials, request: Request, response: Response):
     try:
@@ -132,10 +168,23 @@ def login(credentials: Credentials, request: Request, response: Response):
             db.execute(
                 delete(BrowserSession).where(BrowserSession.token_digest == previous)
             )
+        membership = db.get(
+            Membership, (credentials.organisation_id, user.id), with_for_update=True
+        )
+        if membership is None:
+            raise HTTPException(401, "Invalid username or password")
+        account = SessionAccount(
+            id=user.id,
+            username=user.username,
+            organisation_name=db.get(Organisation, membership.organisation_id).name,
+            role=membership.role,
+            organisation_id=membership.organisation_id,
+        )
         token = new_token()
         db.add(
             BrowserSession(
                 token_digest=token_digest(token),
+                organisation_id=membership.organisation_id,
                 user_id=user.id,
                 expires_at=now + SESSION_LIFETIME,
             )
@@ -149,20 +198,29 @@ def login(credentials: Credentials, request: Request, response: Response):
         secure=request.app.state.secure_cookies,
         samesite="strict",
     )
-    return user
+    return account
 
 
-@router.get("/me", response_model=Account)
-def me(user: Annotated[User, Depends(current_user)]):
+@router.get("/me", response_model=SessionAccount)
+def me(user: Annotated[SessionAccount, Depends(current_user)]):
     return user
 
 
 @router.get("/users", response_model=list[Account])
 def list_users(
-    request: Request, admin: Annotated[User, Depends(require_roles("admin"))]
+    request: Request, admin: Annotated[SessionAccount, Depends(require_roles("admin"))]
 ):
     with request.app.state.sessions() as db:
-        return db.scalars(select(User).order_by(User.username)).all()
+        return (
+            db.execute(
+                select(User.id, User.username, Membership.role)
+                .join(Membership, Membership.user_id == User.id)
+                .where(Membership.organisation_id == admin.organisation_id)
+                .order_by(User.username)
+            )
+            .mappings()
+            .all()
+        )
 
 
 @router.post("/logout", status_code=204, dependencies=[Depends(require_browser_origin)])
@@ -170,9 +228,10 @@ def logout(request: Request, response: Response):
     digest = request_digest(request)
     if digest:
         with request.app.state.sessions.begin() as db:
-            db.execute(
-                delete(BrowserSession).where(BrowserSession.token_digest == digest)
-            )
+            session = db.get(BrowserSession, digest, with_for_update=True)
+            if session is not None:
+                check_expected_organisation(request, session.organisation_id)
+                db.delete(session)
     response.delete_cookie(
         COOKIE_NAME,
         path="/api/v1",

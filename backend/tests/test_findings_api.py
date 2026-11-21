@@ -8,9 +8,11 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.manage_users import create_member
+from app.models.organisation import LOCAL_ORGANISATION
 from app.core.auth import COOKIE_NAME, new_token, token_digest
 from app.main import app
-from app.models.auth import BrowserSession, User
+from app.models.auth import BrowserSession
 from app.models.scan import DataFingerprint, Finding, ScannedFile, ScanJob
 from app.models.source import AuditEvent, ScanSource
 
@@ -21,35 +23,47 @@ ORIGIN = {"Origin": "http://127.0.0.1:5173"}
 def test_filtered_masked_findings_review_and_exports(services, monkeypatch):
     with TestClient(app) as client:
         with app.state.sessions.begin() as db:
-            user = User(
+            user = create_member(
+                db,
+                organisation_id=LOCAL_ORGANISATION,
                 username=f"analyst-{uuid4().hex}",
                 role="analyst",
                 password_hash="unused",
             )
-            viewer = User(
-                username=f"viewer-{uuid4().hex}", role="viewer", password_hash="unused"
+            viewer = create_member(
+                db,
+                organisation_id=LOCAL_ORGANISATION,
+                username=f"viewer-{uuid4().hex}",
+                role="viewer",
+                password_hash="unused",
             )
             source = ScanSource(
+                organisation_id=LOCAL_ORGANISATION,
                 name="Synthetic inventory",
                 configured_path=f"/private-fixture/{uuid4().hex}",
             )
             fingerprint = DataFingerprint(
-                category="email", key_version=1, digest=uuid4().hex * 2
+                organisation_id=LOCAL_ORGANISATION,
+                category="email",
+                key_version=1,
+                digest=uuid4().hex * 2,
             )
             db.add_all([user, viewer, source, fingerprint])
             db.flush()
             tokens = {}
-            for account in (user, viewer):
+            for role, account in (("analyst", user), ("viewer", viewer)):
                 token = new_token()
-                tokens[account.role] = token
+                tokens[role] = token
                 db.add(
                     BrowserSession(
+                        organisation_id=LOCAL_ORGANISATION,
                         user_id=account.id,
                         token_digest=token_digest(token),
                         expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
                     )
                 )
             job = ScanJob(
+                organisation_id=LOCAL_ORGANISATION,
                 source_id=source.id,
                 created_by=user.id,
                 status="completed",
@@ -61,11 +75,15 @@ def test_filtered_masked_findings_review_and_exports(services, monkeypatch):
             fixtures = []
             for filename in ("fixture_%_one.txt", "fixture-copy@example.invalid.csv"):
                 file = ScannedFile(
-                    scan_job_id=job.id, relative_path=filename, parse_status="parsed"
+                    organisation_id=LOCAL_ORGANISATION,
+                    scan_job_id=job.id,
+                    relative_path=filename,
+                    parse_status="parsed",
                 )
                 db.add(file)
                 db.flush()
                 finding = Finding(
+                    organisation_id=LOCAL_ORGANISATION,
                     scanned_file_id=file.id,
                     fingerprint_id=fingerprint.id,
                     category="email",

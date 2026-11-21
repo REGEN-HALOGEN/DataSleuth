@@ -1,7 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { auth, AuthError, type Account } from "./api";
+import { auth, AuthError, type SessionAccount } from "./api";
 
-export function SignIn({ onSignIn }: { onSignIn: (account: Account) => void }) {
+export function SignIn({
+  onSignIn,
+}: {
+  onSignIn: (account: SessionAccount) => void;
+}) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -16,6 +20,7 @@ export function SignIn({ onSignIn }: { onSignIn: (account: Account) => void }) {
         await auth.login(
           String(data.get("username")),
           String(data.get("password")),
+          String(data.get("organisation") ?? "").trim() || undefined,
         ),
       );
     } catch (failure) {
@@ -60,6 +65,11 @@ export function SignIn({ onSignIn }: { onSignIn: (account: Account) => void }) {
             required
             maxLength={256}
           />
+          <details>
+            <summary>Sign in to another organisation</summary>
+            <label htmlFor="organisation">Organisation ID</label>
+            <input id="organisation" name="organisation" maxLength={36} />
+          </details>
           {error && (
             <p className="form-error" role="alert">
               {error}

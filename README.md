@@ -98,6 +98,70 @@ PostgreSQL and Redis. Stop frontend and backend with Ctrl+C. In Ubuntu, run
 `docker compose stop` from the project root to stop services without removing
 containers or volumes.
 
+## Local organisations
+
+Existing installations upgrade into **Local organisation**. The usual sign-in, role
+names, approved directory registration, and worker commands continue to work.
+Before upgrading to `0007_organisation_ownership`, back up PostgreSQL, stop all
+older API and worker processes, and upgrade the entire installation together.
+`start.sh` applies the migration on startup. Keep the backup for recovery.
+The new revision has a forward-only ownership transition.
+
+A trusted installation operator can create an additional organisation from
+`backend`, then grant an existing user a role using the returned UUID:
+
+```bash
+../.venv-linux/bin/python -m app.manage_organisations create "Research"
+../.venv-linux/bin/python -m app.manage_organisations grant ORG_UUID USERNAME analyst
+```
+
+Use `manage_users USERNAME --role viewer --organisation-id ORG_UUID` to provision a new
+identity in that organisation. To change an existing role, run `grant` again.
+`manage_organisations revoke ORG_UUID USERNAME` removes just that membership
+and its sessions. Console password recovery changes an identity's password and
+revokes its sessions across all organisations. Console access is reserved for
+the trusted installation operator.
+
+To sign in to an additional organisation, expand **Sign in to another
+organisation** and enter its UUID. Switching requires signing out and signing in.
+API clients can supply `organisation_id` in the login JSON. Omitting it selects
+the original local organisation. Login and `/auth/me` additionally return
+`organisation_id` and `organisation_name`. The returned role and the Accounts
+list apply to the active organisation.
+
+`ALLOWED_SCAN_ROOTS` belongs to the original local organisation. To grant an
+additional organisation local scanning access, configure `ORGANISATION_SCAN_ROOTS`
+as a JSON object mapping its UUID to a list of approved absolute directories.
+For example, replace the sample UUID and path below with the operator-created
+organisation ID and an existing isolated directory:
+
+```dotenv
+ORGANISATION_SCAN_ROOTS={"9b603aaf-4126-4743-9705-a95bd149079a":["/srv/datasleuth/research"]}
+```
+
+Restart the API and worker with the same root assignments. Multi-organisation
+configuration requires existing canonical, disjoint roots owned or controlled
+by the installation operator. Keep bind mounts or aliases to another tenant's
+files outside those trees. Drain or cancel pending jobs before removing a
+worker's organisation assignment. An empty list retains the assignment while
+denying file access. Membership alone grants no filesystem root.
+
+New scans correlate within their organisation and fingerprint scheme/key
+version. Historical related-occurrence groups remain available. A job created
+before the upgrade finishes using its original scheme. A new scan starts a
+separate correlation group, even if its content matches a historical finding.
+
+## Private document sources
+
+An operator can upload a single private document and scan it through the same worker as an approved directory. Uploads are opt-in. See [private storage setup, API and retention](docs/PRIVATE_STORAGE.md).
+
+## Hosted backend preparation
+
+The [Render guide](docs/DEPLOYMENT_RENDER.md) covers separate API and worker
+services. The [Supabase guide](docs/DEPLOYMENT_SUPABASE.md) covers verified
+database connections and the independent migration command. The
+[Vercel guide](docs/DEPLOYMENT_VERCEL.md) covers the same-origin frontend proxy.
+
 ## Synthetic demo
 
 Generate labelled fixtures and try the scan, review, export, and restart
@@ -139,6 +203,21 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-21 — Hosted deployment configuration
+
+- Added separate Render Docker services, hosted database and Redis settings, schema-aware readiness, and a same-origin Vercel proxy.
+- Set the Vercel build-time API origin and the Render API's exact browser origin as described in the deployment guides.
+
+### 2026-11-21 — Private document sources
+
+- Added authenticated private uploads, immutable document scans, quota reservations, expiry and retried deletion. Source responses include upload metadata and allow a null directory path for uploaded documents.
+- Apply `0008_private_documents` and upgrade the API and worker together. Existing directory scans continue to work with storage disabled.
+
+### 2026-11-20 — Organisation-scoped local scanning
+
+- Added membership-scoped accounts, sessions, sources, scans, report access, and fingerprint correlation.
+- Existing installations should follow the upgrade and root-assignment instructions under **Local organisations** before starting the new API or worker.
 
 ### 2026-11-20 — Synthetic acceptance demo
 

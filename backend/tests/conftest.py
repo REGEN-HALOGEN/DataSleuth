@@ -18,5 +18,12 @@ def services():
     with pytest.MonkeyPatch.context() as patch:
         for name, value in settings.items():
             patch.setenv(name, value)
+        for name in (
+            "UPLOAD_INTEGRITY_KEY",
+            "SUPABASE_STORAGE_URL",
+            "SUPABASE_STORAGE_KEY",
+            "SUPABASE_STORAGE_BUCKET",
+        ):
+            patch.setenv(name, "")
         patch.setenv("BROWSER_ORIGIN", "http://127.0.0.1:5173")
         yield

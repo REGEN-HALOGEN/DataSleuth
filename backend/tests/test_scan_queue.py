@@ -13,10 +13,12 @@ import pytest
 from redis import Redis
 from sqlalchemy import select
 
+from app.manage_users import create_member
+from app.models.organisation import LOCAL_ORGANISATION
 from app.core.auth import COOKIE_NAME, new_token, token_digest
 from app.core.config import load_config
 from app.main import app
-from app.models.auth import BrowserSession, User
+from app.models.auth import BrowserSession
 from app.models.scan import Finding, ScanJob, ScannedFile
 from app.models.source import AuditEvent, ScanSource
 from app.scanners import pipeline
@@ -38,28 +40,39 @@ def stack(services, tmp_path, monkeypatch):
     with TestClient(app) as client:
         sessions = app.state.sessions
         with sessions.begin() as db:
-            user = User(
+            user = create_member(
+                db,
+                organisation_id=LOCAL_ORGANISATION,
                 username=f"analyst-{uuid4().hex}",
                 role="analyst",
                 password_hash="unused",
             )
-            viewer = User(
-                username=f"viewer-{uuid4().hex}", role="viewer", password_hash="unused"
+            viewer = create_member(
+                db,
+                organisation_id=LOCAL_ORGANISATION,
+                username=f"viewer-{uuid4().hex}",
+                role="viewer",
+                password_hash="unused",
             )
-            source = ScanSource(name="Queue fixture", configured_path=str(tmp_path))
+            source = ScanSource(
+                organisation_id=LOCAL_ORGANISATION,
+                name="Queue fixture",
+                configured_path=str(tmp_path),
+            )
             db.add_all([user, viewer, source])
             db.flush()
             tokens = {}
-            for account in (user, viewer):
+            for role, account in (("analyst", user), ("viewer", viewer)):
                 token = new_token()
                 db.add(
                     BrowserSession(
+                        organisation_id=LOCAL_ORGANISATION,
                         user_id=account.id,
                         token_digest=token_digest(token),
                         expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
                     )
                 )
-                tokens[account.role] = token
+                tokens[role] = token
         yield client, sessions, source, user, tokens
 
 
@@ -128,7 +141,7 @@ def test_api_and_real_worker_process(stack):
 def test_stale_worker_cannot_duplicate_file_results(stack, monkeypatch):
     _, sessions, source, user, _ = stack
     config = load_config()
-    job_id = enqueue(sessions, source.id, user.id).id
+    job_id = enqueue(sessions, source.id, user.id, LOCAL_ORGANISATION).id
     first_claim = claim_next(sessions, DURATION, job_id=job_id)
     process = pipeline.process_file
     replacement_claim = None
@@ -159,7 +172,9 @@ def test_stale_worker_cannot_duplicate_file_results(stack, monkeypatch):
             job.findings_created,
         ) == ("completed", 2, 2, 2)
         results = db.scalars(
-            select(Finding).join(ScannedFile).where(ScannedFile.scan_job_id == job_id)
+            select(Finding)
+            .join(ScannedFile, ScannedFile.id == Finding.scanned_file_id)
+            .where(ScannedFile.scan_job_id == job_id)
         ).all()
         assert len(results) == 2
 
@@ -167,12 +182,12 @@ def test_stale_worker_cannot_duplicate_file_results(stack, monkeypatch):
 @WSL_ONLY
 def test_running_cancellation_discards_in_flight_result(stack, monkeypatch):
     _, sessions, source, user, _ = stack
-    job_id = enqueue(sessions, source.id, user.id).id
+    job_id = enqueue(sessions, source.id, user.id, LOCAL_ORGANISATION).id
     claim = claim_next(sessions, DURATION, job_id=job_id)
     process = pipeline.process_file
 
     def cancel_during_read(*args):
-        cancel(sessions, job_id, user.id)
+        cancel(sessions, job_id, user.id, LOCAL_ORGANISATION)
         return process(*args)
 
     monkeypatch.setattr(pipeline, "process_file", cancel_during_read)
@@ -191,7 +206,7 @@ def test_running_cancellation_discards_in_flight_result(stack, monkeypatch):
 
 def test_retry_limit_is_terminal(stack):
     _, sessions, source, user, _ = stack
-    job_id = enqueue(sessions, source.id, user.id).id
+    job_id = enqueue(sessions, source.id, user.id, LOCAL_ORGANISATION).id
     claim_next(sessions, DURATION, job_id=job_id)
     with sessions.begin() as db:
         job = db.get(ScanJob, job_id)
@@ -201,3 +216,23 @@ def test_retry_limit_is_terminal(stack):
     with sessions() as db:
         job = db.get(ScanJob, job_id)
         assert (job.status, job.error_summary) == ("failed", "retry_limit")
+
+
+@WSL_ONLY
+def test_worker_interrupt_releases_active_claim(stack, monkeypatch):
+    from app.workers import scan
+
+    _, sessions, source, user, _ = stack
+    job_id = enqueue(sessions, source.id, user.id, LOCAL_ORGANISATION).id
+
+    def interrupted(*args, **kwargs):
+        scan.interrupt(None, None)
+
+    monkeypatch.setattr(scan, "run_claim", interrupted)
+    scan.run_worker(sessions, None, load_config())
+    replacement = claim_next(sessions, DURATION, job_id=job_id)
+    assert replacement is not None
+    pipeline.run_claim(sessions, load_config(), replacement)
+    with sessions() as db:
+        job = db.get(ScanJob, job_id)
+        assert (job.status, job.attempts, job.files_processed) == ("completed", 2, 2)

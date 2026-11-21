@@ -4,26 +4,44 @@ import argparse
 from getpass import GetPassWarning, getpass
 import logging
 import warnings
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.auth import normalize_username, password_hasher
-from app.core.config import load_config
+from app.core.config import database_url, deployment_mode
 from app.core.logging import configure_logging
 from app.db.session import create_database
 from app.models.auth import BrowserSession, User
+from app.models.organisation import Membership, LOCAL_ORGANISATION
 
 
-def check_admin() -> None:
+def create_member(db, *, username, password_hash, role, organisation_id):
+    user = User(username=username, password_hash=password_hash)
+    db.add(user)
+    db.flush()
+    db.add(Membership(organisation_id=organisation_id, user_id=user.id, role=role))
+    db.flush()
+    return user
+
+
+def check_admin(organisation_id: UUID) -> None:
     configure_logging("INFO")
     try:
-        engine, sessions = create_database(load_config()["DATABASE_URL"])
+        engine, sessions = create_database(
+            database_url(), hosted=deployment_mode() == "hosted"
+        )
         try:
             with sessions() as db:
                 admin_id = db.scalar(
                     select(User.id)
-                    .where(User.role == "admin", User.active.is_(True))
+                    .join(Membership, Membership.user_id == User.id)
+                    .where(
+                        Membership.organisation_id == organisation_id,
+                        Membership.role == "admin",
+                        User.active.is_(True),
+                    )
                     .limit(1)
                 )
         finally:
@@ -45,11 +63,12 @@ def main() -> None:
     mode.add_argument("--bootstrap-admin", action="store_true")
     mode.add_argument("--reset-admin-password", action="store_true")
     mode.add_argument("--role", choices=("admin", "analyst", "viewer"))
+    parser.add_argument("--organisation-id", type=UUID, default=LOCAL_ORGANISATION)
     args = parser.parse_args()
     if args.check_admin:
         if args.username:
             parser.error("--check-admin cannot be combined with account arguments")
-        check_admin()
+        check_admin(args.organisation_id)
         return
     if not args.username:
         parser.error("username is required")
@@ -74,15 +93,19 @@ def main() -> None:
 
     configure_logging("INFO")
     try:
-        engine, sessions = create_database(load_config()["DATABASE_URL"])
+        engine, sessions = create_database(
+            database_url(), hosted=deployment_mode() == "hosted"
+        )
         try:
             with sessions.begin() as db:
                 if args.reset_admin_password:
                     user = db.scalar(
                         select(User)
+                        .join(Membership, Membership.user_id == User.id)
                         .where(
                             User.username == username,
-                            User.role == "admin",
+                            Membership.organisation_id == args.organisation_id,
+                            Membership.role == "admin",
                             User.active.is_(True),
                         )
                         .with_for_update()
@@ -96,12 +119,12 @@ def main() -> None:
                         delete(BrowserSession).where(BrowserSession.user_id == user.id)
                     )
                 else:
-                    db.add(
-                        User(
-                            username=username,
-                            role=role,
-                            password_hash=password_hasher.hash(password),
-                        )
+                    create_member(
+                        db,
+                        username=username,
+                        password_hash=password_hasher.hash(password),
+                        role=role,
+                        organisation_id=args.organisation_id,
                     )
         finally:
             engine.dispose()

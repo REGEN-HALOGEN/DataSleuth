@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from contextlib import closing
 from sqlalchemy import update
 
+from app.manage_users import create_member
+from app.models.organisation import LOCAL_ORGANISATION, Membership
 from app.core.auth import COOKIE_NAME, password_hasher, token_digest
 from app.main import app
 from app.models.auth import BrowserSession, User
@@ -28,13 +30,19 @@ def accounts(services):
     try:
         with sessions.begin() as db:
             users = [
-                User(username=f"test-{role}-{suffix}", role=role, password_hash=encoded)
+                create_member(
+                    db,
+                    organisation_id=LOCAL_ORGANISATION,
+                    username=f"test-{role}-{suffix}",
+                    role=role,
+                    password_hash=encoded,
+                )
                 for role in ("admin", "analyst", "viewer")
             ]
             db.add_all(users)
     finally:
         engine.dispose()
-    return {user.role: user for user in users}
+    return dict(zip(("admin", "analyst", "viewer"), users, strict=True))
 
 
 def post_login(client, username, password=PASSWORD, origin=ORIGIN):
@@ -54,6 +62,8 @@ def test_login_rotation_logout_and_protected_endpoints(accounts):
         assert response.status_code == 200
         assert response.json() == {
             "id": str(admin.id),
+            "organisation_id": str(LOCAL_ORGANISATION),
+            "organisation_name": "Local organisation",
             "username": admin.username,
             "role": "admin",
         }
@@ -94,7 +104,14 @@ def test_role_changes_expiry_and_disabled_accounts(accounts, role):
         assert post_login(client, user.username).status_code == 200
         assert client.get(f"{PREFIX}/users").status_code == 403
         with app.state.sessions.begin() as db:
-            db.execute(update(User).where(User.id == user.id).values(role="admin"))
+            db.execute(
+                update(Membership)
+                .where(
+                    Membership.user_id == user.id,
+                    Membership.organisation_id == LOCAL_ORGANISATION,
+                )
+                .values(role="admin")
+            )
         assert client.get(f"{PREFIX}/users").status_code == 200
         with app.state.sessions.begin() as db:
             session = db.get(BrowserSession, token_digest(client.cookies[COOKIE_NAME]))

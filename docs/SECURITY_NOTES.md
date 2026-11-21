@@ -42,3 +42,21 @@
 - Redis AOF and PostgreSQL use local persistent volumes. Use host-volume
   protection and backups appropriate to the data.
 - Approved scan roots default to an empty list. Scanning is a later milestone.
+
+
+## Organisation boundary
+
+Each session references one membership. Protected requests resolve its role and
+the active user from PostgreSQL. A browser-supplied organisation ID at login
+must match a membership. The browser sends its expected organisation on data
+requests so a stale tab cannot apply an action to a different organisation
+after reauthentication. Membership removal cascades to matching sessions.
+
+Tenant-owned parent/child relationships use composite foreign keys. The
+application scopes aggregate queries, exports, review history, and worker
+writes to the same organisation. New fingerprints use an HMAC-derived
+organisation key. The local console, database credentials, worker process,
+mount configuration, and HMAC master remain installation-wide trust boundaries.
+Reserve root assignment and membership administration for the installation
+operator. Application RBAC cannot isolate tenants from a database superuser or
+an operator who exposes another organisation's files through a mount.

@@ -15,9 +15,11 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import select
 
+from app.manage_users import create_member
+from app.models.organisation import Organisation
 from app.core.auth import COOKIE_NAME, new_token, token_digest
 from app.main import app
-from app.models.auth import BrowserSession, User
+from app.models.auth import BrowserSession
 from app.models.scan import ScannedFile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,20 +53,29 @@ def test_synthetic_scan_review_export_and_restart(services, tmp_path, monkeypatc
     baseline = file_metadata(folder)
     assert subprocess.run(seed, capture_output=True, timeout=15).returncode == 1
     assert file_metadata(folder) == baseline
-    monkeypatch.setenv("ALLOWED_SCAN_ROOTS", json.dumps([str(folder)]))
+    organisation_id = uuid4()
+    monkeypatch.setenv("ALLOWED_SCAN_ROOTS", "[]")
+    monkeypatch.setenv(
+        "ORGANISATION_SCAN_ROOTS", json.dumps({str(organisation_id): [str(folder)]})
+    )
     monkeypatch.setenv("MAX_FILE_SIZE_BYTES", str(MAX_FILE_BYTES))
 
     token = new_token()
     with TestClient(app) as client:
         with app.state.sessions.begin() as db:
-            user = User(
-                username=f"demo-{uuid4().hex}", role="analyst", password_hash="unused"
-            )
-            db.add(user)
+            db.add(Organisation(id=organisation_id, name="Synthetic acceptance"))
             db.flush()
+            user = create_member(
+                db,
+                organisation_id=organisation_id,
+                username=f"demo-{uuid4().hex}",
+                role="analyst",
+                password_hash="unused",
+            )
             username = user.username
             db.add(
                 BrowserSession(
+                    organisation_id=organisation_id,
                     user_id=user.id,
                     token_digest=token_digest(token),
                     expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),

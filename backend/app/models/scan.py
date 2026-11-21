@@ -16,12 +16,18 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.auth import Base
+from app.models.organisation import Owned, owned_parent
 
 
-class ScanJob(Base):
+class ScanJob(Owned, Base):
     __tablename__ = "scan_jobs"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "id"),
+        owned_parent("source_id", "scan_sources"),
+    )
+    fingerprint_scheme: Mapped[int] = mapped_column(default=2)
     source_id: Mapped[UUID] = mapped_column(ForeignKey("scan_sources.id"), index=True)
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(32), index=True)
@@ -44,9 +50,13 @@ class ScanJob(Base):
     error_summary: Mapped[str | None] = mapped_column(String(40))
 
 
-class ScannedFile(Base):
+class ScannedFile(Owned, Base):
     __tablename__ = "scanned_files"
-    __table_args__ = (UniqueConstraint("scan_job_id", "relative_path"),)
+    __table_args__ = (
+        UniqueConstraint("scan_job_id", "relative_path"),
+        UniqueConstraint("organisation_id", "id"),
+        owned_parent("scan_job_id", "scan_jobs"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     scan_job_id: Mapped[UUID] = mapped_column(ForeignKey("scan_jobs.id"), index=True)
@@ -55,22 +65,30 @@ class ScannedFile(Base):
     parse_status: Mapped[str] = mapped_column(String(32))
 
 
-class DataFingerprint(Base):
+class DataFingerprint(Owned, Base):
     __tablename__ = "data_fingerprints"
-    __table_args__ = (UniqueConstraint("category", "key_version", "digest"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "organisation_id", "scheme", "category", "key_version", "digest"
+        ),
+        UniqueConstraint("organisation_id", "id"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     category: Mapped[str] = mapped_column(String(32))
     key_version: Mapped[int]
+    scheme: Mapped[int] = mapped_column(default=2)
     digest: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
 
-class Finding(Base):
+class Finding(Owned, Base):
     __tablename__ = "findings"
     __table_args__ = (
+        owned_parent("scanned_file_id", "scanned_files"),
+        owned_parent("fingerprint_id", "data_fingerprints"),
         CheckConstraint(
             "review_status IN ('needs_review', 'confirmed', 'false_positive', 'follow_up')",
             name="ck_findings_review_status",

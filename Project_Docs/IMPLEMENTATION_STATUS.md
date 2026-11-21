@@ -1,6 +1,96 @@
 # Implementation status
 
-Last updated: 2026-11-20
+Last updated: 2026-11-21
+
+## Vercel frontend preparation — 2026-11-21
+
+The Vercel configuration builds the Vite frontend and rewrites relative
+`/api/v1/*` requests to an HTTPS Render origin supplied at build time.
+It disables API caching and handles React Router deep links. Local checks
+validated the generated Vercel configuration, API route matching, frontend
+fallback and rejection of invalid origins. The Vite production build and
+frontend lint and formatting checks passed. Six Chromium tests passed
+through the local preview proxy. The private-upload browser test was
+skipped in this run and previously passed in the storage increment.
+
+The hosted proxy, cookie forwarding and maximum upload size still require
+a staging browser run. [Vercel runbook](../docs/DEPLOYMENT_VERCEL.md)
+
+## Hosted API and worker preparation — 2026-11-21
+
+The Render Blueprint defines separate Docker services for the API and
+persistent worker. Hosted mode disables local filesystem claims and requires
+a private Storage configuration, verified PostgreSQL TLS, authenticated
+Redis and an exact HTTPS frontend origin for the API. The API and worker use
+separate database pool limits and secret requirements. Alembic uses a
+separate migration connection. The API readiness probe checks PostgreSQL,
+the expected Alembic revision and Redis. The worker checks schema
+compatibility before claiming jobs.
+
+| Local verification | Result |
+| --- | --- |
+| Render Blueprint and image | Blueprint validated against Render's published JSON Schema. The Docker image built and the non-root runtime executed the isolated parser. |
+| Hosted Docker smoke | Verified PostgreSQL TLS and authenticated Redis over the disposable private network. The API returned 503 before migration and during a Redis outage, and recovered in both cases. The worker refused the empty schema and left a queued directory job untouched after migration. The API rejected a foreign origin and set Secure, HttpOnly, SameSite=Strict cookies. Both containers exited successfully on SIGTERM. |
+| Backend regression suite | 59 passed against disposable PostgreSQL, Redis and self-hosted Supabase Storage. Coverage includes active lease release and resume, storage regression and local synthetic acceptance. The existing Starlette/AnyIO deprecation warning remains. |
+
+Hosted provider connectivity, platform proxy behaviour and parser sandboxing
+for untrusted customer uploads remain staging work. The next deployment
+increment is the Vercel same-origin frontend proxy and browser verification.
+[Render runbook](../docs/DEPLOYMENT_RENDER.md) · [Supabase runbook](../docs/DEPLOYMENT_SUPABASE.md)
+
+## Storage adapters and private document sources — 2026-11-21
+
+The scanner now inventories and opens bounded inputs through local-directory
+and private-document adapters. The existing durable queue, parser subprocess,
+detectors, review workflow and reports serve both. Each managed source owns one
+immutable document. The API reserves quota and accepts authenticated binary
+uploads. The worker verifies size and a source-specific keyed digest before
+parsing. Expiry and explicit deletion retain masked findings and audit history.
+
+| Local verification on WSL/Linux | Result |
+| --- | --- |
+| Local adapter before adding the private adapter | All 39 existing backend tests passed, including the original synthetic acceptance, cancellation and stale-worker cases. |
+| Empty database and populated `0007` upgrade | Reached `0008_private_documents` and Alembic reported no drift. An independent before/after check verified every existing field on a legacy directory source. |
+| Complete backend suite | 46 passed against fresh and upgraded disposable PostgreSQL 17 databases, with Redis 8 and a self-hosted Supabase Storage v1.89.12 REST service. The existing Starlette/AnyIO warning remains. |
+| Storage operations | All seven file formats scanned. Tests covered cross-tenant access, write-once publication, quota and input validation, changed bytes, scratch cleanup, lost upload responses, stale claims, deletion retry, expiry and preserved reports. Public, unauthenticated and anonymous-role reads were denied by the local provider. A public test bucket failed the privacy check. |
+| Frontend and browser | Production build, ESLint and Prettier passed. Seven Chromium tests passed through the live API, worker and preview proxy, including a private upload, scan and deletion request. |
+| Backend static checks | Ruff lint and formatting passed. |
+
+The standalone local Storage service used its filesystem backend and a test
+service-role JWT. Hosted Supabase gateway credentials, deployed bucket policies,
+provider backup retention, and Render/Vercel deployment still require staging
+verification. The next deployment increment is API and worker production
+configuration. [Storage setup and lifecycle](../docs/PRIVATE_STORAGE.md)
+
+## Tenant-safe local increment — 2026-11-20
+
+Implemented organisation memberships and membership-bound sessions, tenant
+ownership checks throughout the API and worker, organisation-specific local
+root grants, and tenant-separated HMAC fingerprints. Trusted console tools
+manage membership. The browser displays the active organisation and supports
+sign-in to a specific organisation. See [local setup and upgrade](../README.md#local-organisations).
+
+| Verification on WSL/Linux | Result |
+| --- | --- |
+| Unchanged baseline at `033b287`, isolated PostgreSQL 17 and Redis 8 | 35 backend tests and 5 Chromium tests passed, including real-worker synthetic scan, review, export, and restart. Production Vite build passed. |
+| Empty database to `0007_organisation_ownership` | All revisions applied. Alembic reported no schema drift. |
+| Populated `0006_finding_review` to head | Before/after comparison preserved 38 identities and password hashes, 21 session rows, 9 sources, 11 jobs, 27 file rows, 7 fingerprints, 18 findings and 31 audits. All original roles matched the backfilled memberships. |
+| Compatibility after upgrade | An existing cookie authenticated. A partially processed job resumed with its original scheme and added two occurrences to its existing group. Alembic reported no drift. |
+| Backend regression and synthetic acceptance | 39 tests passed on both fresh and upgraded databases. The synthetic workflow verified nine file outcomes, six masked findings, related occurrences, review history, both export formats, and restart persistence. |
+| Browser and frontend | Six Chromium tests passed through an isolated loopback Vite preview proxy, including the full worker scan and a user with different roles in two organisations. TypeScript, Vite production build, ESLint and Prettier checks passed. |
+| Backend static checks | Ruff lint and formatting passed. Pytest reports the existing Starlette/AnyIO deprecation warning. |
+
+Isolation tests covered foreign UUID reads and writes, search, aggregates,
+directory registration, account lists, both report formats, fingerprint
+separation on identical input, invalid cross-organisation database references,
+and membership revocation during parsing. Each synthetic acceptance run now
+uses an independent organisation so repeated fixtures keep deterministic
+related-occurrence counts on a reused disposable database.
+
+The local filesystem, process and database administrators remain trusted.
+Operators control disjoint roots and worker assignments. Native Windows
+worker execution and cloud storage/deployment are unverified. No hosted
+services or production databases participated in this increment.
 
 ## Milestones
 

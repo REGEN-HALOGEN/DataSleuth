@@ -3,7 +3,10 @@ import { jsonRequest, request } from "../../lib/api";
 export type ScanSource = {
   id: string;
   name: string;
-  configured_path: string;
+  configured_path: string | null;
+  upload_state: "pending" | "ready" | "deleting" | "deleted" | null;
+  size_bytes: number | null;
+  expires_at: string | null;
   enabled: boolean;
 };
 
@@ -37,6 +40,8 @@ export const scans = {
     ),
   updateSource: (id: string, update: { name?: string; enabled?: boolean }) =>
     request<ScanSource>(`sources/${id}`, jsonRequest("PATCH", update)),
+  deleteDocument: (id: string) =>
+    request<ScanSource>(`documents/${id}`, { method: "DELETE" }),
   start: (source_id: string) =>
     request<Scan>("scans", jsonRequest("POST", { source_id, confirmed: true })),
   history: () => request<Scan[]>("scans"),

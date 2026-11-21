@@ -81,3 +81,34 @@ test("a lost session redirects an open tab to sign-in", async ({ page }) => {
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page).toHaveURL(/\/sign-in$/);
 });
+
+test("one user has different permissions in a second organisation", async ({
+  page,
+}) => {
+  const organisation = process.env.DATASLEUTH_E2E_ORGANISATION;
+  test.skip(
+    !organisation,
+    "Set a second organisation with a viewer membership for the admin.",
+  );
+  if (!admin || !password || !organisation)
+    throw new Error("Configure the synthetic memberships.");
+  await page.goto("/accounts");
+  await page.getByText("Sign in to another organisation").click();
+  await page.getByLabel("Organisation ID").fill(organisation);
+  await fillCredentials(page, admin, password);
+  await expect(page.getByRole("alert")).toHaveText(
+    "Administrator access is required.",
+  );
+  const me = await (await page.request.get("/api/v1/auth/me")).json();
+  expect(me.organisation_id).toBe(organisation);
+  expect(me.role).toBe("viewer");
+  expect((await page.request.get("/api/v1/auth/users")).status()).toBe(403);
+  await page.reload();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Administrator access is required.",
+  );
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.goto("/accounts");
+  await fillCredentials(page, admin, password);
+  await expect(page.getByRole("cell", { name: admin })).toBeVisible();
+});
