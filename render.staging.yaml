@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: datasleuth-staging-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: sh start-render.sh
+    autoDeployTrigger: "off"

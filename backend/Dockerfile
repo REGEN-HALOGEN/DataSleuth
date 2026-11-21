@@ -9,6 +9,7 @@ RUN python -m pip install --no-cache-dir . \
     && useradd --system --uid 10001 --create-home datasleuth
 COPY alembic.ini ./
 COPY alembic ./alembic
+COPY start-render.sh ./start-render.sh
 
 USER 10001
 CMD ["python", "-m", "app.serve"]
