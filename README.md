@@ -155,12 +155,38 @@ separate correlation group, even if its content matches a historical finding.
 
 An operator can upload a single private document and scan it through the same worker as an approved directory. Uploads are opt-in. See [private storage setup, API and retention](docs/PRIVATE_STORAGE.md).
 
-## Hosted backend preparation
+## Hosted staging
 
-The [Render guide](docs/DEPLOYMENT_RENDER.md) covers separate API and worker
-services. The [Supabase guide](docs/DEPLOYMENT_SUPABASE.md) covers verified
-database connections and the independent migration command. The
-[Vercel guide](docs/DEPLOYMENT_VERCEL.md) covers the same-origin frontend proxy.
+[Open DataSleuth staging](https://datasleuth-staging.vercel.app) using your
+assigned staging account. Vercel serves the frontend and forwards API
+requests to the free Render web service. Supabase holds scan jobs, findings
+and private uploads. The Linux scan worker runs in Docker on the WSL host and
+polls Supabase PostgreSQL. Scans and upload cleanup resume when the worker
+comes back online.
+
+For the first request after an idle period, allow about a minute for the free
+Render API to wake. The [API readiness endpoint](https://datasleuth-staging-api.onrender.com/health/ready)
+checks the database revision, PostgreSQL and Redis. It does not check the
+worker. On the configured WSL host, check the worker and its private Redis
+container with:
+
+```bash
+docker ps --filter name=datasleuth-staging-local
+```
+
+If those existing containers are stopped, start Docker Desktop and run:
+
+```bash
+docker start datasleuth-staging-local-redis datasleuth-staging-local-worker
+```
+
+The live staging check verified browser sign-in and sign-out, a private
+synthetic upload, a completed scan, masked CSV and JSON exports, and removal
+of the original document from Supabase Storage. Use synthetic files in
+staging. See the [Render runbook](docs/DEPLOYMENT_RENDER.md),
+[Supabase runbook](docs/DEPLOYMENT_SUPABASE.md),
+[Vercel runbook](docs/DEPLOYMENT_VERCEL.md), and
+[verification record](Project_Docs/IMPLEMENTATION_STATUS.md).
 
 ## Synthetic demo
 
@@ -203,6 +229,11 @@ feature, fix, setup change, or security change. Keep entries newest first and
 record any migration or action required by existing users. After verifying
 each completed task, review the staged files for sensitive data, commit the
 changes, and push the commit to GitHub before starting the next objective.
+
+### 2026-11-21 — Live staging verification
+
+- Verified the free Render API, Vercel frontend, hosted Supabase and local Docker worker together with a synthetic document.
+- Added instructions for checking or restarting the staging worker on the configured WSL host.
 
 ### 2026-11-21 — Hosted deployment configuration
 

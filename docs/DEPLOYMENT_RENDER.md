@@ -1,6 +1,25 @@
 # Render API and worker
 
-The repository Blueprint defines two Docker services built from the same
+## Free staging
+
+The live staging deployment uses `render.staging.yaml` for the free API in
+Singapore. It adopts the staging API by name and uses manual deploys. The
+separate free Key Value instance requires internal authentication, with
+external access blocked. The API's Docker startup script reads the
+base64-encoded Supabase CA from `DATASLEUTH_DB_CA_B64` and writes it to
+`/tmp/supabase-ca.crt`. Set the `sslrootcert` path in the runtime
+`DATABASE_URL` to that file. The CA is a public certificate. Keep the
+connection URL and its password in Render's server environment.
+
+The worker and its authenticated Redis instance run in Docker on the WSL
+host. They use separate Redis from the Render API. The worker discovers
+queued jobs by polling PostgreSQL when it receives no Redis wake-up.
+Keep the worker running during demos. If the worker stops, queued jobs
+and document cleanup wait until it comes back.
+
+## Separate hosted services
+
+The `render.yaml` Blueprint defines two Docker services built from the same
 backend directory. The image runs as a non-root Linux user.
 
 | Service | Command | Initial size |
@@ -75,5 +94,6 @@ job after lease expiry. Existing retry limits and stale-worker fencing govern
 recovery. The API and worker startup logs contain allowlisted events. Protect
 platform access logs and avoid capturing request bodies, cookies or credentials.
 
-The Blueprint, Docker image and runtime were checked locally. Render deployment,
-its private network and proxy behaviour require a staging run.
+The free API was verified through the live Vercel browser workflow with
+hosted Supabase and the WSL worker. The full paid API and worker Blueprint
+was validated locally.

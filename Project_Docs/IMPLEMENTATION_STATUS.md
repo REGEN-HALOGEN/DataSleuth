@@ -2,19 +2,27 @@
 
 Last updated: 2026-11-21
 
-## Vercel frontend preparation — 2026-11-21
+## Live staging verification — 2026-11-21
 
-The Vercel configuration builds the Vite frontend and rewrites relative
-`/api/v1/*` requests to an HTTPS Render origin supplied at build time.
-It disables API caching and handles React Router deep links. Local checks
-validated the generated Vercel configuration, API route matching, frontend
-fallback and rejection of invalid origins. The Vite production build and
-frontend lint and formatting checks passed. Six Chromium tests passed
-through the local preview proxy. The private-upload browser test was
-skipped in this run and previously passed in the storage increment.
+The staging frontend uses Vercel's same-origin rewrite with an explicit
+HTTPS Render destination and API caching disabled. The API and its
+authenticated Key Value instance run on Render's free tier. Supabase
+PostgreSQL and private Storage are hosted. A WSL Docker worker polls the
+durable PostgreSQL queue and uses a separate authenticated local Redis
+instance. Scanning and cleanup depend on that worker's availability.
 
-The hosted proxy, cookie forwarding and maximum upload size still require
-a staging browser run. [Vercel runbook](../docs/DEPLOYMENT_VERCEL.md)
+| Live check | Result |
+| --- | --- |
+| Dependencies and migrations | Render readiness returned 200. Supabase reached `0008_private_documents` without schema drift. The restricted runtime role could write application data and lacked schema creation privileges. |
+| Browser sign-in and session | Chromium opened a protected deep link, signed in, restored the session after reload, and rejected a foreign Origin with 403. The session cookie was Secure, HttpOnly and SameSite=Strict. Sign-out revoked the session. |
+| Private document workflow | A synthetic upload through Vercel completed a scan and produced one finding. CSV and JSON exports masked it and carried `no-store`. |
+| Deletion | After the browser requested deletion, the worker removed the object. An authenticated Storage read confirmed the object was gone, and the masked finding remained in PostgreSQL. |
+| User acceptance | The user confirmed that staging worked in their browser. |
+
+The Vite production build, ESLint and Prettier passed. The live run used a
+small synthetic document. Maximum-size upload, concurrent browser isolation,
+provider recovery and production parser sandboxing remain future verification
+work. [Vercel runbook](../docs/DEPLOYMENT_VERCEL.md)
 
 ## Hosted API and worker preparation — 2026-11-21
 
@@ -33,9 +41,9 @@ compatibility before claiming jobs.
 | Hosted Docker smoke | Verified PostgreSQL TLS and authenticated Redis over the disposable private network. The API returned 503 before migration and during a Redis outage, and recovered in both cases. The worker refused the empty schema and left a queued directory job untouched after migration. The API rejected a foreign origin and set Secure, HttpOnly, SameSite=Strict cookies. Both containers exited successfully on SIGTERM. |
 | Backend regression suite | 59 passed against disposable PostgreSQL, Redis and self-hosted Supabase Storage. Coverage includes active lease release and resume, storage regression and local synthetic acceptance. The existing Starlette/AnyIO deprecation warning remains. |
 
-Hosted provider connectivity, platform proxy behaviour and parser sandboxing
-for untrusted customer uploads remain staging work. The next deployment
-increment is the Vercel same-origin frontend proxy and browser verification.
+The live staging record covers hosted connectivity and proxy behaviour with
+the WSL worker. Parser isolation for untrusted uploads and a persistent
+hosted worker remain operational work.
 [Render runbook](../docs/DEPLOYMENT_RENDER.md) · [Supabase runbook](../docs/DEPLOYMENT_SUPABASE.md)
 
 ## Storage adapters and private document sources — 2026-11-21
@@ -57,10 +65,9 @@ parsing. Expiry and explicit deletion retain masked findings and audit history.
 | Backend static checks | Ruff lint and formatting passed. |
 
 The standalone local Storage service used its filesystem backend and a test
-service-role JWT. Hosted Supabase gateway credentials, deployed bucket policies,
-provider backup retention, and Render/Vercel deployment still require staging
-verification. The next deployment increment is API and worker production
-configuration. [Storage setup and lifecycle](../docs/PRIVATE_STORAGE.md)
+service-role JWT. The live staging record covers hosted Supabase secret-key authentication and
+the privacy and deletion checks for the staging bucket. Provider backup
+retention remains unverified. [Storage setup and lifecycle](../docs/PRIVATE_STORAGE.md)
 
 ## Tenant-safe local increment — 2026-11-20
 
@@ -89,8 +96,8 @@ related-occurrence counts on a reused disposable database.
 
 The local filesystem, process and database administrators remain trusted.
 Operators control disjoint roots and worker assignments. Native Windows
-worker execution and cloud storage/deployment are unverified. No hosted
-services or production databases participated in this increment.
+worker execution remains unverified. This increment used disposable local
+services. The live staging record covers the later hosted verification.
 
 ## Milestones
 

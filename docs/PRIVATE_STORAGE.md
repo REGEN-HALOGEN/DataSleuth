@@ -98,6 +98,6 @@ browser suite, configure both running services and set
 `DATASLEUTH_E2E_UPLOAD=1` alongside the existing E2E settings.
 
 The implementation was exercised against a disposable self-hosted Supabase
-Storage REST service using a test service-role JWT. Hosted gateway, modern
-secret-key authentication, provider policy and backup behaviour require
-separate staging verification.
+Storage REST service using a test service-role JWT. Live staging also verified the hosted gateway with a server secret key,
+private bucket access, and deletion through the browser workflow. Provider
+backup retention remains unverified.
