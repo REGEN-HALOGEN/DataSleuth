@@ -207,7 +207,7 @@ changes, and push the commit to GitHub before starting the next objective.
 ### 2026-11-21 — Hosted deployment configuration
 
 - Added separate Render Docker services, hosted database and Redis settings, schema-aware readiness, and a same-origin Vercel proxy.
-- Set the Vercel build-time API origin and the Render API's exact browser origin as described in the deployment guides.
+- Set the Vercel API rewrite destination and the Render API's exact browser origin as described in the deployment guides.
 
 ### 2026-11-21 — Private document sources
 

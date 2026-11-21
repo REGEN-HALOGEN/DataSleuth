@@ -2,15 +2,13 @@
 
 Use `frontend` as the project root. The repository configuration selects Vite,
 runs `npm ci` and `npm run build`, and publishes `dist`.
-[Vercel programmatic configuration](https://vercel.com/docs/project-configuration/vercel-ts)
+[Vercel static configuration](https://vercel.com/docs/project-configuration/vercel-json)
 
-Set `DATASLEUTH_API_ORIGIN` for the target Vercel environment to the exact
-public HTTPS Render origin, for example `https://your-api.onrender.com`.
-Use the origin without a trailing slash or path. Missing or invalid configuration
-fails deployment configuration evaluation. The origin is a routing setting.
-Keep database, storage, Redis and session credentials on the server.
-Configure preview deployments with a separate test backend and its own
-allowed browser origin.
+The API rewrite in `frontend/vercel.json` points to the public staging Render
+origin. For another deployment, update its destination to that environment's
+exact HTTPS API origin and keep the `/api/v1/:path*` suffix. Keep database,
+storage, Redis and session credentials on the server. Use a separate test
+backend and browser origin for previews.
 
 Set the Render API's `BROWSER_ORIGIN` to the exact browser-facing Vercel origin.
 The browser uses relative `/api/v1/*` requests. Vercel forwards those requests
